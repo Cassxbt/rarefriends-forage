@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, reactivationCost, sceneryPreset, sparkStep, toMilestones,
+  projectEarned, pullRadius, pullStep, reactivationCost, sceneryPreset, sparkStep, toMilestones, BASE_REACH, MAX_PULL,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -113,4 +113,16 @@ test("RF formatting is exact and trims zeros", () => {
   assert.equal(formatRf(1000n * RF), "1,000");
   assert.equal(formatRf(friend.earnedRf), "7.4345");
   assert.equal(formatRf(RF / 2n, 2), "0.5");
+});
+
+test("kept treats widen the pull, capped, and redeeming gives it up", () => {
+  assert.equal(pullRadius([0n, 0n, 0n, 0n]), BASE_REACH);
+  assert.equal(pullRadius([1n, 1n, 0n, 0n]), BASE_REACH + 18);
+  assert.equal(pullRadius([0n, 0n, 0n, 5n]), BASE_REACH + MAX_PULL);
+});
+
+test("pickups inside the pull glide in and are collected at base reach", () => {
+  assert.equal(pullStep([100, 0], [0, 0], 50, 5), null, "outside the pull stays put");
+  assert.deepEqual(pullStep([40, 0], [0, 0], 50, 5), [35, 0], "inside the pull moves closer");
+  assert.equal(pullStep([BASE_REACH, 0], [0, 0], 50, 5), "collected");
 });

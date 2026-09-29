@@ -2,6 +2,10 @@ export const RF = 10n ** 18n;
 export const POUCH_PICKUP_UNIT = RF / 2n;
 export const MAX_POUCH_PICKUPS = 12;
 export const MAX_SPARKS_ON_GROUND = 6;
+export const BASE_REACH = 20;
+/** Extra pull per kept treat, in treat order (Crumb, Berry, Honeycomb, Stardrop). Redeeming a treat gives its pull up. */
+export const TREAT_PULL = [6, 12, 20, 40] as const;
+export const MAX_PULL = 60;
 
 export type Address = `0x${string}`;
 export type Hash = `0x${string}`;
@@ -81,6 +85,21 @@ export function sparkStep(base: bigint, current: bigint, onGround: number): Spar
   if (current < base) return { kind: "claimed" };
   if (current === base || onGround >= MAX_SPARKS_ON_GROUND) return { kind: "none" };
   return { kind: "spark", value: current - base };
+}
+
+/** Pull radius from kept treats: more held, farther the Friend draws pickups in. */
+export function pullRadius(inventory: readonly bigint[]): number {
+  const extra = inventory.reduce((sum, count, i) => sum + Number(count) * (TREAT_PULL[i] ?? 0), 0);
+  return BASE_REACH + Math.min(MAX_PULL, extra);
+}
+
+/** Moves a pickup toward the Friend; it is collected once inside base reach. */
+export function pullStep(at: WorldPoint, friend: WorldPoint, radius: number, speed: number): WorldPoint | "collected" | null {
+  const dx = friend[0] - at[0], dy = friend[1] - at[1], distance = Math.hypot(dx, dy);
+  if (distance <= BASE_REACH) return "collected";
+  if (distance > radius) return null;
+  const step = Math.min(speed, distance);
+  return [at[0] + (dx / distance) * step, at[1] + (dy / distance) * step];
 }
 
 export function pouchPickups(earned: bigint): Readonly<{ count: number; each: bigint }> {

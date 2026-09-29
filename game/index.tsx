@@ -9,7 +9,7 @@ import { createFriendSoundKit, type FriendSoundCue, type FriendSoundKit } from "
 import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTraits, withTimeout } from "./friend-chain.ts";
 import { buildWorld, screen } from "./world.ts";
 import {
-  accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
+  accrualRate, deriveVitals, pullRadius, pullStep, TREAT_PULL, BASE_REACH, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
   short, sparkStep, toMilestones,
   type FriendState, type FriendTraits, type Milestone, type WorldPoint,
 } from "./vitals.ts";
@@ -19,7 +19,7 @@ import "./style.css";
 
 const POLL_MS = 15_000;
 const TRAITS_TIMEOUT_MS = 8_000;
-const GATHER_RADIUS = 20;
+const PULL_SPEED = 180;
 
 type Menu = "den" | "treats" | "proof" | "reward" | "settings" | null;
 type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark"; taken: boolean };
@@ -119,21 +119,38 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     sound.current?.play("action-ready");
   }, [scene, state, sparkBase, vitals?.awake, pickups]);
 
+  const reach = pullRadius(snapshot?.inventory ?? []);
+
+  // Each frame, pickups inside the Friend's pull glide toward it; kept treats widen the pull.
   useEffect(() => {
     if (!pickups.some(p => !p.taken)) return;
-    let frame = 0;
-    const scan = () => {
+    let frame = 0, last = performance.now();
+    const scan = (time: number) => {
+      const seconds = Math.min(0.1, (time - last) / 1000);
+      last = time;
       const canvas = worldRef.current?.querySelector("canvas");
       const x = Number(canvas?.dataset.x), y = Number(canvas?.dataset.y);
       if (!paused && !menu && Number.isFinite(x) && Number.isFinite(y)) {
-        const hit = pickups.find(p => !p.taken && Math.hypot(p.at[0] - x, p.at[1] - y) <= GATHER_RADIUS);
-        if (hit) { setPickups(current => current.map(p => p.id === hit.id ? { ...p, taken: true } : p)); sound.current?.play(hit.kind === "spark" ? "reveal-rare" : "select"); return; }
+        let moved = false, collected: Pickup | null = null;
+        const next = pickups.map(p => {
+          if (p.taken) return p;
+          const step = pullStep(p.at, [x, y], reach, PULL_SPEED * seconds);
+          if (step === null) return p;
+          moved = true;
+          if (step === "collected") { collected ??= p; return { ...p, taken: true }; }
+          return { ...p, at: step };
+        });
+        if (moved) {
+          setPickups(next);
+          if (collected) sound.current?.play((collected as Pickup).kind === "spark" ? "reveal-rare" : "select");
+          return;
+        }
       }
       frame = requestAnimationFrame(scan);
     };
     frame = requestAnimationFrame(scan);
     return () => cancelAnimationFrame(frame);
-  }, [pickups, paused, menu]);
+  }, [pickups, paused, menu, reach]);
 
   // The SDK canvas only hears keys while focused; hand focus back whenever the world is in play.
   useEffect(() => {
@@ -204,7 +221,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           <span>{state ? `+ ${formatRf(state.earnedWeth, 8)} WETH` : ""}</span>
         </div>
         <div className="forage-card">
-          <span>Carrying {carrying.length} · {formatRf(carried)} RF</span>
+          <span>Carrying {carrying.length} · {formatRf(carried)} RF · pull {reach}{reach > BASE_REACH ? " (treats)" : ""}</span>
           <span>{!state ? "Reading its pouch…" : remaining ? `${remaining} to gather` : vitals?.awake ? `Can't carry what it hasn't earned · next check ${nextCheck}s` : "Resting: nothing to gather"}</span>
           <span>Brought home: {trips.length} {trips.length === 1 ? "trip" : "trips"} · {formatRf(broughtHome)} RF</span>
         </div>
@@ -236,8 +253,9 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           </ol>}
       </> : menu === "treats" ? <>
         <p>One treat costs {formatGameRf(definition.price)} and cracks into one snack for your Friend.</p>
-        <table><thead><tr><th>Treat</th><th>Chance</th><th>Value</th></tr></thead><tbody>{definition.outcomes.map(item =>
-          <tr key={item.name}><td>{item.name}</td><td>{item.chanceBps / 100}%</td><td>{formatGameRf(item.reward)}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>Treat</th><th>Chance</th><th>Value</th><th>Pull while kept</th></tr></thead><tbody>{definition.outcomes.map((item, index) =>
+          <tr key={item.name}><td>{item.name}</td><td>{item.chanceBps / 100}%</td><td>{formatGameRf(item.reward)}</td><td>+{TREAT_PULL[index]}</td></tr>)}</tbody></table>
+        <p className="forage-small">Keep a snack and your Friend pulls pickups in from farther away. Redeem it for RF and the pull goes with it.</p>
         <p>Preview wallet: {formatGameRf(snapshot.rfBalance)} · {snapshot.consumables.toString()} treats · expected value 0.875 RF per treat.</p>
         <button type="button" className="rf-frame-primary" disabled={!canBuy || busy || paused} onClick={() => void act(() => client.buy(1n), "purchase", () => setMessage("One simulated treat bought."))}>Buy one treat · {formatGameRf(definition.price)}</button>
         <button type="button" disabled={busy || paused || !pending && snapshot.consumables === 0n} onClick={() => void openTreat()}>{pending ? "Finish pending treat" : "Crack a treat"}</button>
