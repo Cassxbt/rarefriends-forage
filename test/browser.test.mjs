@@ -131,7 +131,7 @@ test("an earning Friend gathers in its own world and only real events change the
 
   chain.fail = true;
   await game.getByText("Can't see your Friend's chain state right now").waitFor();
-  await game.getByText("Pouch (last successful read)").waitFor();
+  await game.getByText("Unclaimed on-chain (last read)").waitFor();
   const frozen = await game.locator(".forage-pouch strong").innerText();
   await sleep(4_000);
   assert.equal(await game.locator(".forage-pouch strong").innerText(), frozen, "the pouch never counts up without the chain");

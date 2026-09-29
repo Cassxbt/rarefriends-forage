@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createWorldNavigator } from "@rarefriends/friendsdk/navigation";
-import { buildWorld, isVisible } from "./world.ts";
+import { buildWorld, isVisible, labelAt } from "./world.ts";
 import { MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND } from "./vitals.ts";
 
 const SCENERIES = ["Garden", "Circuit", "Crystal", "Rooftop", "Tidal", "Orbital", ""];
@@ -14,6 +14,9 @@ for (const scenery of SCENERIES) {
     assert.ok(elapsed < 1500, `built in ${elapsed.toFixed(0)} ms`);
     assert.equal(scene.matched, scenery !== "");
     assert.equal(new Set(scene.stations.map(String)).size, 3);
+    const labels = scene.interactions.map(i => labelAt(i.position, i.labelOffset ?? -150));
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++)
+      assert.ok(Math.abs(labels[i][0] - labels[j][0]) >= 170 || Math.abs(labels[i][1] - labels[j][1]) >= 60, "station labels don't overlap");
     assert.ok(scene.open.length >= MAX_POUCH_PICKUPS + MAX_SPARKS_ON_GROUND, `${scene.open.length} open spots`);
 
     const navigator = createWorldNavigator(scene.world);

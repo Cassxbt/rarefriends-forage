@@ -216,7 +216,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           {worldNote && <span className="forage-warn">{worldNote}</span>}
         </div>
         <div className="forage-card forage-pouch">
-          <span>{fresh ? "Pouch (claimable, live)" : "Pouch (last successful read)"}</span>
+          <span>{fresh ? "Unclaimed on-chain (live)" : "Unclaimed on-chain (last read)"}</span>
           <strong>{state ? `${formatRf(pouchNow, 5)} RF` : "—"}</strong>
           <span>{state ? `+ ${formatRf(state.earnedWeth, 8)} WETH` : ""}</span>
         </div>
