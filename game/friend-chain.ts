@@ -89,10 +89,8 @@ export async function readFriendHistory(friendId: bigint, owner: Address): Promi
   }), head)).map(log => ({ tokenId: friendId, tier: log.args.tier, weight: log.args.weight, paid: log.args.paid, block: log.blockNumber, tx: log.transactionHash as Hash }));
 
   const transfers: TransferLog[] = [];
-  const visited = new Set<string>();
   let holder: Address | null = owner, before = head;
-  for (let hop = 0; holder && hop < MAX_OWNER_HOPS && !visited.has(holder.toLowerCase()); hop++) {
-    visited.add(holder.toLowerCase());
+  for (let hop = 0; holder && hop < MAX_OWNER_HOPS; hop++) {
     const incoming = (await chunked((fromBlock, toBlock) => chain.getLogs({ address: CONTRACTS.generations, event: TRANSFER, args: { to: holder!, tokenId: friendId }, fromBlock, toBlock, strict: true }), head))
       .filter(log => log.blockNumber <= before)
       .sort((a, b) => (a.blockNumber < b.blockNumber ? 1 : -1));

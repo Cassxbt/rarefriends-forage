@@ -29,3 +29,4 @@
 .forage-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .forage-reward { text-align: center; }
 @media (prefers-reduced-motion: reduce) { .forage-bob { animation: none; } }
+.forage-toast { position: absolute; left: 50%; bottom: 140px; transform: translateX(-50%); max-width: 70%; margin: 0; padding: 8px 12px; background: #111; color: #f4f4f0; text-align: center; }

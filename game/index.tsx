@@ -214,6 +214,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <button type="button" onClick={() => navigate("proof")}>Proof</button>
         <button type="button" onClick={() => navigate("settings")}>Settings</button>
       </div>
+      {!menu && message && <p className="forage-toast" role="status">{message}</p>}
       <p className="forage-hint">WASD / arrows or tap to walk · walk into glowing pickups · E at the Den, Treat stand or Proof board</p>
     </div>
 
