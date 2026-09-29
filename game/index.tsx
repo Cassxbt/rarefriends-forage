@@ -34,6 +34,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [rate, setRate] = useState(0n);
   const [now, setNow] = useState(Date.now());
   const [chainError, setChainError] = useState("");
+  const [worldNote, setWorldNote] = useState("");
+  const [atDen, setAtDen] = useState(false);
   const [history, setHistory] = useState<History | null>(null);
   const [historyError, setHistoryError] = useState("");
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
@@ -54,17 +56,22 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const version = ++epoch.current;
     sound.current = createFriendSoundKit({ muted: true });
     setTraits(null); setState(null); setHistory(null); setSnapshot(null); setMenu(null); setPickups([]); setTrips([]);
-    setSparkBase(null); setChainError(""); setHistoryError(""); setMuted(true); locked.current = false;
+    setSparkBase(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false;
     const alive = () => version === epoch.current;
     client.read().then(value => alive() && setSnapshot(value)).catch(cause => alive() && setError(String(cause?.message ?? cause)));
     withTimeout(readFriendTraits(friendId), TRAITS_TIMEOUT_MS, "Reading this Friend's world").then(value => alive() && setTraits(value))
-      .catch(cause => { if (!alive()) return; setTraits({ character: "", scenery: "", floor: "", state: "" }); setChainError(cause instanceof Error ? cause.message.split("\n")[0] : "World could not be read."); });
-    let previous: FriendState | null = null;
-    const poll = () => readFriendState(friendId).then(next => {
-      if (!alive()) return;
-      if (previous) setRate(accrualRate(previous, next));
-      previous = next; setState(next); setChainError("");
-    }).catch(cause => alive() && setChainError(cause instanceof Error ? cause.message.split("\n")[0] : "The chain could not be read."));
+      .catch(cause => { if (!alive()) return; setTraits({ character: "", scenery: "", floor: "", state: "" }); setWorldNote(`Couldn't read this Friend's world (${cause instanceof Error ? cause.message.split("\n")[0] : "unknown error"}); showing the default world.`); });
+    let previous: FriendState | null = null, polling = false;
+    const poll = () => {
+      if (polling) return;
+      polling = true;
+      readFriendState(friendId).then(next => {
+        if (!alive() || (previous && next.block <= previous.block)) return;
+        if (previous) setRate(accrualRate(previous, next));
+        previous = next; setState(next); setChainError("");
+      }).catch(cause => alive() && setChainError(cause instanceof Error ? cause.message.split("\n")[0] : "The chain could not be read."))
+        .finally(() => { polling = false; });
+    };
     void poll();
     const timer = setInterval(poll, POLL_MS), tick = setInterval(() => setNow(Date.now()), 1000);
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -81,7 +88,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   }, [state, history, historyError, friendId]);
 
   const vitals = state ? deriveVitals(state) : null;
-  const pouchNow = state ? projectEarned(state, rate, now) : 0n;
+  const fresh = Boolean(state) && !chainError && now - (state?.readAt ?? 0) <= POLL_MS * 2;
+  const pouchNow = state ? (fresh ? projectEarned(state, rate, now) : state.earnedRf) : 0n;
 
   // The first run lays out the pouch that was already waiting; later runs only get what the chain adds.
   useEffect(() => {
@@ -127,6 +135,13 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     return () => cancelAnimationFrame(frame);
   }, [pickups, paused, menu]);
 
+  // The SDK canvas only hears keys while focused; hand focus back whenever the world is in play.
+  useEffect(() => {
+    if (!scene || menu || paused) return;
+    const frame = requestAnimationFrame(() => worldRef.current?.querySelector("canvas")?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [scene, menu, paused]);
+
   const carrying = pickups.filter(p => p.taken);
   const carried = carrying.reduce((sum, p) => sum + p.value, 0n);
   const remaining = pickups.filter(p => !p.taken).length;
@@ -134,7 +149,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const broughtHome = trips.reduce((sum, t) => sum + t.carried, 0n);
 
   function bringHome() {
-    if (carrying.length === 0 || paused) return;
+    if (carrying.length === 0 || paused || !atDen) return;
     setTrips(current => [...current, { number: current.length + 1, carried, pickups: carrying.length }]);
     setPickups(current => current.filter(p => !p.taken));
     sound.current?.play("reward");
@@ -148,7 +163,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     catch (cause) { if (version === epoch.current) setError(cause instanceof Error ? cause.message : "The preview action failed."); }
     finally { if (version === epoch.current) { locked.current = false; setBusy(false); } }
   }
-  const navigate = (next: Menu) => { if (!busy && !paused) { setMenu(next); setError(""); if (next !== "den") setMessage(""); } };
+  const navigate = (next: Menu, fromWorld = false) => { if (!busy && !paused) { setMenu(next); setAtDen(fromWorld && next === "den"); setError(""); if (next !== "den") setMessage(""); } };
 
   if (!scene || !snapshot) return <div className="forage-loading" role={error ? "alert" : "status"}>{error || "Finding your Friend's world on Robinhood Chain…"}
     {error && <button type="button" onClick={() => { setError(""); setRetry(r => r + 1); }}>Retry</button>}</div>;
@@ -172,7 +187,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   return <section className="forage" aria-label="Forage" aria-busy={busy}>
     <div className="forage-world" ref={worldRef} inert={Boolean(menu) || paused || undefined}>
       <GameWorld world={scene.world} spawn={scene.spawn} interactions={scene.interactions} friendId={friendId}
-        paused={Boolean(menu) || paused} reducedMotion={reducedMotion} onInteract={id => navigate(id as Menu)} />
+        paused={Boolean(menu) || paused} reducedMotion={reducedMotion} onInteract={id => navigate(id as Menu, true)} />
       <div className="forage-pickups" aria-hidden="true"><div className="forage-surface">
         {pickups.filter(p => !p.taken).map(p => <span key={p.id} className={`forage-pickup forage-${p.kind}${reducedMotion ? "" : " forage-bob"}`} style={screen(p.at)} />)}
       </div></div>
@@ -181,15 +196,16 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           <strong>Friend #{friendId.toString()} · {traits?.character || "Friend"}</strong>
           <span>{scene.name}{traits?.scenery ? ` · on-chain scenery: ${traits.scenery}` : ""}</span>
           <span className={chainError ? "forage-warn" : vitals?.awake ? "forage-live" : "forage-rest"}>{status}</span>
+          {worldNote && <span className="forage-warn">{worldNote}</span>}
         </div>
         <div className="forage-card forage-pouch">
-          <span>Pouch (claimable, live)</span>
+          <span>{fresh ? "Pouch (claimable, live)" : "Pouch (last successful read)"}</span>
           <strong>{state ? `${formatRf(pouchNow, 5)} RF` : "—"}</strong>
           <span>{state ? `+ ${formatRf(state.earnedWeth, 8)} WETH` : ""}</span>
         </div>
         <div className="forage-card">
           <span>Carrying {carrying.length} · {formatRf(carried)} RF</span>
-          <span>{remaining ? `${remaining} to gather` : vitals?.awake ? `Can't carry what it hasn't earned · next check ${nextCheck}s` : "Resting: nothing to gather"}</span>
+          <span>{!state ? "Reading its pouch…" : remaining ? `${remaining} to gather` : vitals?.awake ? `Can't carry what it hasn't earned · next check ${nextCheck}s` : "Resting: nothing to gather"}</span>
           <span>Brought home: {trips.length} {trips.length === 1 ? "trip" : "trips"} · {formatRf(broughtHome)} RF</span>
         </div>
       </div>
@@ -203,7 +219,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
 
     {menu && <GameMenu title={{ den: "Den", treats: "Treat stand", proof: "Proof board", reward: "Your treat", settings: "Settings" }[menu]} onClose={busy ? undefined : () => navigate(null)}>
       {menu === "den" ? <>
-        {carrying.length > 0
+        {carrying.length > 0 && !atDen ? <p>Walk your Friend to the Den to bring {carrying.length} home.</p>
+          : carrying.length > 0
           ? <button type="button" className="rf-frame-primary" disabled={paused} onClick={bringHome}>Bring {carrying.length} home · {formatRf(carried)} RF</button>
           : <p>{remaining ? "Go gather what your Friend earned, then bring it home." : "Nothing carried yet."}</p>}
         {state && !vitals?.awake && <p className="forage-rest">This Friend is resting: its activation is cleared, so it isn't earning and can't gather. Reactivating a generation {state.generation} Friend costs {reactivation ?? "?"} RF on rarefriends.com. It stays fully playable here.</p>}
@@ -232,7 +249,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <button type="button" disabled={busy || paused} onClick={() => navigate(null)}>Keep it</button>
         <button type="button" disabled={busy || paused} onClick={() => void act(() => client.redeem(result!.outcomeId!, 1n), "reward", () => setMenu("treats"))}>Redeem · {formatGameRf(outcome.reward)}</button>
       </div> : menu === "proof" ? <>
-        <p className="forage-small">Every live number on screen is one read-only call to Robinhood Chain (4663). Nothing is signed or stored.</p>
+        <p className="forage-small">Each value below is one read-only call to Robinhood Chain (4663) at the block shown. Nothing is signed or stored. The HUD pouch counts up between reads at the measured rate and freezes if a read fails.</p>
         {chainError && <p role="alert">Last read failed: {chainError}. <button type="button" onClick={() => setRetry(r => r + 1)}>Retry</button></p>}
         {state && <dl className="forage-proof">
           <dt>Block</dt><dd>{state.block.toLocaleString("en-US")}</dd>

@@ -13,9 +13,9 @@
 .forage-live { color: #2f7a00; }
 .forage-rest { color: #8a5a00; }
 .forage-warn { color: #b00020; }
-.forage-actions { position: absolute; right: 12px; bottom: 44px; display: flex; gap: 8px; }
+.forage-actions { position: absolute; right: 12px; bottom: 64px; display: flex; gap: 8px; }
 .forage-actions button, .forage-item button { font: inherit; padding: 6px 10px; background: #f4f4f0; border: 2px solid #111; cursor: pointer; }
-.forage-hint { position: absolute; left: 0; right: 0; bottom: 8px; margin: 0; text-align: center; color: #333; }
+.forage-hint { position: absolute; left: 0; right: 0; bottom: 104px; pointer-events: none; margin: 0; text-align: center; color: #333; }
 .forage-loading { display: grid; place-content: center; gap: 12px; height: 100%; text-align: center; }
 .forage-wall { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .forage-wall li { display: grid; gap: 2px; padding: 8px; border-left: 4px solid #cf0; background: #f4f4f0; }
