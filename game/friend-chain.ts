@@ -79,7 +79,7 @@ async function chunked<T>(read: (fromBlock: bigint, toBlock: bigint) => Promise<
 }
 
 /**
- * Transfers are found by walking owners backwards (the RPC rejects token-only Transfer filters);
+ * Transfers are found by walking owners backwards, each step strictly earlier than the last (the RPC rejects token-only Transfer filters);
  * activations filter by collection and token directly, so they survive owner changes.
  */
 export async function readFriendHistory(friendId: bigint, owner: Address): Promise<{ transfers: TransferLog[]; activations: ActivationLog[]; times: Map<bigint, number> }> {
@@ -89,14 +89,17 @@ export async function readFriendHistory(friendId: bigint, owner: Address): Promi
   }), head)).map(log => ({ tokenId: friendId, tier: log.args.tier, weight: log.args.weight, paid: log.args.paid, block: log.blockNumber, tx: log.transactionHash as Hash }));
 
   const transfers: TransferLog[] = [];
-  let holder: Address | null = owner;
-  for (let hop = 0; holder && hop < MAX_OWNER_HOPS; hop++) {
-    const incoming = (await chunked((fromBlock, toBlock) => chain.getLogs({ address: CONTRACTS.generations, event: TRANSFER, args: { to: holder! }, fromBlock, toBlock, strict: true }), head))
-      .filter(log => log.args.tokenId === friendId)
+  const visited = new Set<string>();
+  let holder: Address | null = owner, before = head;
+  for (let hop = 0; holder && hop < MAX_OWNER_HOPS && !visited.has(holder.toLowerCase()); hop++) {
+    visited.add(holder.toLowerCase());
+    const incoming = (await chunked((fromBlock, toBlock) => chain.getLogs({ address: CONTRACTS.generations, event: TRANSFER, args: { to: holder!, tokenId: friendId }, fromBlock, toBlock, strict: true }), head))
+      .filter(log => log.blockNumber <= before)
       .sort((a, b) => (a.blockNumber < b.blockNumber ? 1 : -1));
     const latest = incoming[0];
     if (!latest) break;
     transfers.push({ from: latest.args.from, to: latest.args.to, tokenId: friendId, block: latest.blockNumber, tx: latest.transactionHash as Hash });
+    before = latest.blockNumber - 1n;
     holder = /^0x0+$/.test(latest.args.from) ? null : latest.args.from;
   }
 
