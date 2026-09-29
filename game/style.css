@@ -1,0 +1,28 @@
+.forage { position: relative; width: 100%; height: 100%; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: #111; }
+.forage-world { position: absolute; inset: 0; }
+.forage-pickups { position: absolute; inset: 0; pointer-events: none; }
+.forage-pickup { position: absolute; width: 14px; height: 14px; margin: -22px 0 0 -7px; transform: rotate(45deg); background: #cf0; border: 2px solid #111; box-shadow: 0 0 0 2px #fff; }
+.forage-spark { width: 10px; height: 10px; margin: -20px 0 0 -5px; background: #fff; }
+.forage-bob { animation: forage-bob 1.6s ease-in-out infinite; }
+@keyframes forage-bob { 50% { translate: 0 -5px; } }
+.forage-hud { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; pointer-events: none; }
+.forage-card { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: #f4f4f0; border: 2px solid #111; }
+.forage-pouch strong { font-size: 18px; }
+.forage-live { color: #2f7a00; }
+.forage-rest { color: #8a5a00; }
+.forage-warn { color: #b00020; }
+.forage-actions { position: absolute; right: 12px; bottom: 44px; display: flex; gap: 8px; }
+.forage-actions button, .forage-item button { font: inherit; padding: 6px 10px; background: #f4f4f0; border: 2px solid #111; cursor: pointer; }
+.forage-hint { position: absolute; left: 0; right: 0; bottom: 8px; margin: 0; text-align: center; color: #333; }
+.forage-loading { display: grid; place-content: center; gap: 12px; height: 100%; text-align: center; }
+.forage-wall { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.forage-wall li { display: grid; gap: 2px; padding: 8px; border-left: 4px solid #cf0; background: #f4f4f0; }
+.forage-wall code { font-size: 11px; color: #555; }
+.forage-trip { border-left-color: #999 !important; }
+.forage-proof { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; }
+.forage-proof dt { color: #666; }
+.forage-proof dd { margin: 0; word-break: break-all; }
+.forage-small { font-size: 11px; color: #555; }
+.forage-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.forage-reward { text-align: center; }
+@media (prefers-reduced-motion: reduce) { .forage-bob { animation: none; } }

@@ -1,0 +1,11 @@
+{
+  "name": "Forage",
+  "consumable": "Treat",
+  "price": "1000000000000000000",
+  "outcomes": [
+    { "name": "Crumb", "chanceBps": 4000, "reward": "250000000000000000" },
+    { "name": "Berry", "chanceBps": 3000, "reward": "750000000000000000" },
+    { "name": "Honeycomb", "chanceBps": 2000, "reward": "1500000000000000000" },
+    { "name": "Stardrop", "chanceBps": 1000, "reward": "2500000000000000000" }
+  ]
+}
