@@ -24,6 +24,9 @@ const PULL_SPEED = 180;
 const GOLDEN_EVERY = 4;
 const GOLDEN_HOLD_MS = 40_000;
 const GOLDEN_MS = 12_000;
+const TRAIL_MAX = 8;
+/** Carried pickups stack above the Friend's head, in view pixels. */
+const CARRY_LIFT = -58, CARRY_STEP = 12;
 
 type Menu = "den" | "treats" | "proof" | "reward" | "settings" | null;
 type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark" | "golden"; taken: boolean; expiresAt?: number };
@@ -40,6 +43,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [chainError, setChainError] = useState("");
   const [worldNote, setWorldNote] = useState("");
   const [atDen, setAtDen] = useState(false);
+  const [friendAt, setFriendAt] = useState<WorldPoint | null>(null);
+  const [pour, setPour] = useState<{ from: WorldPoint; count: number; landed: boolean } | null>(null);
   const [history, setHistory] = useState<History | null>(null);
   const [historyError, setHistoryError] = useState("");
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
@@ -185,6 +190,24 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     return () => cancelAnimationFrame(frame);
   }, [scene, menu, paused]);
 
+  const carryingCount = pickups.filter(p => p.taken).length;
+  useEffect(() => {
+    if (!carryingCount && !pour) return;
+    const timer = setInterval(() => {
+      const canvas = worldRef.current?.querySelector("canvas");
+      const x = Number(canvas?.dataset.x), y = Number(canvas?.dataset.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) setFriendAt(at => at && Math.hypot(at[0] - x, at[1] - y) < 1 ? at : [x, y]);
+    }, 80);
+    return () => clearInterval(timer);
+  }, [carryingCount, pour]);
+
+  useEffect(() => {
+    if (!pour) return;
+    const land = requestAnimationFrame(() => setPour(current => current && { ...current, landed: true }));
+    const done = setTimeout(() => setPour(null), 1400);
+    return () => { cancelAnimationFrame(land); clearTimeout(done); };
+  }, [pour?.from]);
+
   const carrying = pickups.filter(p => p.taken);
   const carried = carrying.reduce((sum, p) => sum + p.value, 0n);
   const remaining = pickups.filter(p => !p.taken).length;
@@ -194,6 +217,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   function bringHome() {
     if (carrying.length === 0 || paused || !atDen) return;
     setTrips(current => [...current, { number: current.length + 1, carried, pickups: carrying.length }]);
+    if (!reducedMotion && friendAt) setPour({ from: friendAt, count: Math.min(carrying.length, TRAIL_MAX), landed: false });
     setPickups(current => current.filter(p => !p.taken));
     sound.current?.play("reward");
     setMessage(`Trip ${trips.length + 1} home: ${formatRf(carried)} RF of real claimable rewards, carried as a picture of what it earned.`);
@@ -234,6 +258,10 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       <div className="forage-pickups" aria-hidden="true"><div className="forage-surface">
         {pickups.filter(p => !p.taken).map(p => <span key={p.id} className={`forage-pickup forage-${p.kind}${reducedMotion ? "" : " forage-bob"}`} style={screen(p.at)}>
           {p.kind === "golden" && <b>{Math.max(0, Math.ceil(((p.expiresAt ?? now) - now) / 1000))}</b>}</span>)}
+        {friendAt && carrying.slice(0, TRAIL_MAX).map((p, i) => <span key={`trail-${p.id}`} className={`forage-pickup forage-trail forage-${p.kind}`}
+          style={screen(friendAt, 0, CARRY_LIFT - i * CARRY_STEP)} />)}
+        {pour && Array.from({ length: pour.count }, (_, i) => <span key={`pour-${i}`} className="forage-pickup forage-pour"
+          style={{ ...(pour.landed ? screen(scene.stations[0]) : screen(pour.from, 0, CARRY_LIFT - i * CARRY_STEP)), transitionDelay: `${i * 70}ms` }} />)}
       </div></div>
       <div className="forage-hud">
         <div className="forage-card">

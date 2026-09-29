@@ -41,13 +41,12 @@ export function buildWorld(scenery: string) {
   const cx = walkable.reduce((sum, p) => sum + p[0], 0) / walkable.length, cy = walkable.reduce((sum, p) => sum + p[1], 0) / walkable.length;
   const spawn = [...walkable].sort((a, b) => Math.hypot(a[0] - cx, a[1] - cy) - Math.hypot(b[0] - cx, b[1] - cy))[0];
   const reachable = floodFill(bare, walkable, spawn);
-  const [den, treats, proof] = placeStations(reachable.filter(p => isVisible(p) && isWorldWalkable(bare, [p[0], p[1] - PROP_BACK], 0)), spawn);
+  const { stations: [den, treats, proof], offsets } = placeStations(reachable.filter(p => isVisible(p) && isWorldWalkable(bare, [p[0], p[1] - PROP_BACK], 0)), spawn);
   const world = validateWorld({ ...bare, props: [...bare.props,
     { type: "bench", x: den[0], y: den[1] - PROP_BACK, scale: 1.2 },
     { type: "crate", x: treats[0], y: treats[1] - PROP_BACK, scale: 1.3 },
     { type: "terminal", x: proof[0], y: proof[1] - PROP_BACK, scale: 1.3 }] });
   const open = reachable.filter(point => isWorldWalkable(world, point, CLEARANCE) && isVisible(point));
-  const offsets = labelOffsets([den, treats, proof]);
   const interactions: GameWorldInteraction[] = [
     { id: "den", label: "Den", position: den, reach: 80, labelOffset: offsets[0] },
     { id: "treats", label: "Treat stand", position: treats, reach: 80, labelOffset: offsets[1] },
@@ -58,36 +57,39 @@ export function buildWorld(scenery: string) {
 
 /** Label clearance: overlap if closer than a label's width horizontally and its height vertically. */
 const LABEL = { width: 170, height: 60 } as const;
-const labelGap = (a: WorldPoint, b: WorldPoint) => {
-  const [ax, ay] = viewPosition(a), [bx, by] = viewPosition(b);
-  return Math.max(Math.abs(ax - bx) / LABEL.width, Math.abs(ay - by) / LABEL.height);
-};
-
-/** Den nearest the spawn, then each station where its label sits furthest from the others, preferring spots near home. */
-export function placeStations(candidates: readonly WorldPoint[], spawn: WorldPoint): [WorldPoint, WorldPoint, WorldPoint] {
-  const near = (p: WorldPoint) => Math.hypot(p[0] - spawn[0], p[1] - spawn[1]);
-  const pool = candidates.filter(p => near(p) > 60);
-  const chosen = [pool.reduce((best, p) => near(p) < near(best) ? p : best)];
-  while (chosen.length < 3) {
-    const score = (p: WorldPoint) => Math.min(Math.min(...chosen.map(c => labelGap(p, c))), 1.5) - near(p) / 1000;
-    chosen.push(pool.filter(p => !chosen.includes(p)).reduce((best, p) => score(p) > score(best) ? p : best));
-  }
-  return chosen as [WorldPoint, WorldPoint, WorldPoint];
-}
-
 const LABEL_OFFSETS = [-150, -90, -210] as const;
-/** Screen box of a station label: centered on the station, lifted by its offset. */
+/** Label centers must sit below the HUD cards. */
+const LABEL_MIN_Y = 140;
+/** Station props must not stand on top of each other. */
+const STATION_GAP = 48;
+
+/** Screen position of a station label: centered on the station, lifted by its offset. */
 export const labelAt = (station: WorldPoint, offset: number): [number, number] => { const [x, y] = viewPosition(station); return [x, y + offset]; };
 const labelsClear = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) >= LABEL.width || Math.abs(a[1] - b[1]) >= LABEL.height;
 
-/** Where stations crowd together (small island worlds), later labels move to a free height. */
-export function labelOffsets(stations: readonly WorldPoint[]): number[] {
-  const placed: [number, number][] = [];
-  return stations.map(station => {
-    const offset = LABEL_OFFSETS.find(o => placed.every(p => labelsClear(labelAt(station, o), p))) ?? LABEL_OFFSETS[0];
-    placed.push(labelAt(station, offset));
-    return offset;
-  });
+/**
+ * Stations and their label heights are chosen together, nearest home first. Each must draw behind the Friend's spawn,
+ * keep its label below the HUD, off the Friend's sprite and clear of the other labels.
+ */
+export function placeStations(candidates: readonly WorldPoint[], spawn: WorldPoint) {
+  const near = (p: WorldPoint) => Math.hypot(p[0] - spawn[0], p[1] - spawn[1]);
+  const [sx, sy] = viewPosition(spawn);
+  const labels: [number, number][] = [[sx, sy - 37]], stations: WorldPoint[] = [], offsets: number[] = [];
+  const byNear = (a: WorldPoint, b: WorldPoint) => near(a) - near(b);
+  // The last pool drops the draw-behind rule, only for worlds too small to fit three stations behind the spawn.
+  const pools = [candidates.filter(p => near(p) > 60 && p[0] + p[1] - PROP_BACK < spawn[0] + spawn[1]).sort(byNear),
+    candidates.filter(p => near(p) > 40).sort(byNear)];
+  const strict = (p: WorldPoint, o: number) => labelAt(p, o)[1] >= LABEL_MIN_Y && labels.every(l => labelsClear(labelAt(p, o), l));
+  const loose = (p: WorldPoint, o: number) => labels.every(l => labelsClear(labelAt(p, o), l));
+  for (const pool of pools) for (const fits of [strict, loose, () => true]) {
+    while (stations.length < 3) {
+      const spot = pool.find(p => !stations.includes(p) && stations.every(s => Math.hypot(p[0] - s[0], p[1] - s[1]) >= STATION_GAP) && LABEL_OFFSETS.some(o => fits(p, o)));
+      if (!spot) break;
+      const offset = LABEL_OFFSETS.find(o => fits(spot, o))!;
+      stations.push(spot); offsets.push(offset); labels.push(labelAt(spot, offset));
+    }
+  }
+  return { stations: stations as [WorldPoint, WorldPoint, WorldPoint], offsets };
 }
 
 export function viewPosition(point: WorldPoint): [number, number] {
@@ -100,8 +102,8 @@ export function isVisible(point: WorldPoint) {
   return x >= VISIBLE.left && x <= VISIBLE.right && y >= VISIBLE.top && y <= VISIBLE.bottom;
 }
 
-/** Position of a world point as a percentage of the 960 × 640 world surface. */
-export function screen(point: WorldPoint) {
+/** Position of a world point as a percentage of the 960 × 640 world surface, optionally nudged in view pixels. */
+export function screen(point: WorldPoint, dx = 0, dy = 0) {
   const [x, y] = viewPosition(point);
-  return { left: `${(x / 960) * 100}%`, top: `${(y / 640) * 100}%` };
+  return { left: `${((x + dx) / 960) * 100}%`, top: `${((y + dy) / 640) * 100}%` };
 }

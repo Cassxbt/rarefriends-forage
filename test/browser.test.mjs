@@ -104,7 +104,7 @@ async function open(chain) {
   await page.getByRole("button", { name: new RegExp(`^Friend #${FRIEND}\\b`) }).click();
   const game = page.frameLocator("iframe");
   await game.getByText(/Awake · earning|Resting · not earning/).waitFor();
-  return { page, game, errors, fixture, pickups: () => game.locator(".forage-pickup").count() };
+  return { page, game, errors, fixture, pickups: () => game.locator(".forage-pickup:not(.forage-trail):not(.forage-pour)").count() };
 }
 
 test("an earning Friend gathers in its own world and only real events change the ground", { timeout: 240_000 }, async () => {
@@ -116,6 +116,7 @@ test("an earning Friend gathers in its own world and only real events change the
   const box = await game.locator(".forage-pickup").first().boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
   await game.getByText(/^Carrying 1 /).waitFor({ timeout: 20_000 });
+  if (process.env.FORAGE_SHOTS) await page.locator(".rf-game-frame").screenshot({ path: `${process.env.FORAGE_SHOTS}/carrying.png` });
 
   await game.locator(".forage-actions").getByRole("button", { name: "Den" }).click();
   await game.getByText(/Walk your Friend to the Den to bring 1 home/).waitFor();
