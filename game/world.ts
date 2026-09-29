@@ -7,6 +7,8 @@ const GRID = 12;
 const CLEARANCE = 10;
 /** The SDK renderer draws the 960 × 640 view starting at this offset in projected space. */
 const VIEW_OFFSET = [320, 330] as const;
+/** Pickups must be visible: inside the view, below the HUD cards and above the SDK toolbar. */
+const VISIBLE = { left: 40, right: 920, top: 130, bottom: 560 } as const;
 
 type World = ReturnType<typeof validateWorld>;
 
@@ -42,7 +44,7 @@ export function buildWorld(scenery: string) {
     { type: "bench", x: den[0], y: den[1] - 18, scale: 1.2 },
     { type: "crate", x: treats[0], y: treats[1] - 18, scale: 1.3 },
     { type: "terminal", x: proof[0], y: proof[1] - 18, scale: 1.3 }] });
-  const open = reachable.filter(point => isWorldWalkable(world, point, CLEARANCE));
+  const open = reachable.filter(point => isWorldWalkable(world, point, CLEARANCE) && isVisible(point));
   const interactions: GameWorldInteraction[] = [
     { id: "den", label: "Den", position: den, reach: 80, labelOffset: -150 },
     { id: "treats", label: "Treat stand", position: treats, reach: 80, labelOffset: -150 },
@@ -51,8 +53,18 @@ export function buildWorld(scenery: string) {
   return { world, spawn, open, stations: [den, treats, proof] as WorldPoint[], interactions, name: String(base.name), matched };
 }
 
+export function viewPosition(point: WorldPoint): [number, number] {
+  const [x, y] = project(point[0], point[1]);
+  return [x - VIEW_OFFSET[0], y - VIEW_OFFSET[1]];
+}
+
+export function isVisible(point: WorldPoint) {
+  const [x, y] = viewPosition(point);
+  return x >= VISIBLE.left && x <= VISIBLE.right && y >= VISIBLE.top && y <= VISIBLE.bottom;
+}
+
 /** Position of a world point as a percentage of the 960 × 640 world surface. */
 export function screen(point: WorldPoint) {
-  const [x, y] = project(point[0], point[1]);
-  return { left: `${((x - VIEW_OFFSET[0]) / 960) * 100}%`, top: `${((y - VIEW_OFFSET[1]) / 640) * 100}%` };
+  const [x, y] = viewPosition(point);
+  return { left: `${(x / 960) * 100}%`, top: `${(y / 640) * 100}%` };
 }

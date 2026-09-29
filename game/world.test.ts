@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createWorldNavigator } from "@rarefriends/friendsdk/navigation";
-import { buildWorld } from "./world.ts";
+import { buildWorld, isVisible } from "./world.ts";
 import { MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND } from "./vitals.ts";
 
 const SCENERIES = ["Garden", "Circuit", "Crystal", "Rooftop", "Tidal", "Orbital", ""];
@@ -19,6 +19,7 @@ for (const scenery of SCENERIES) {
     const navigator = createWorldNavigator(scene.world);
     const sample = scene.open.filter((_, i) => i % Math.ceil(scene.open.length / 12) === 0);
     for (const point of sample) assert.ok((navigator.route(scene.spawn, point)?.length ?? 0) > 0, `unreachable ${point}`);
+    assert.ok(scene.open.every(isVisible), "every pickup spot is on screen");
     for (const station of scene.stations) assert.ok(!scene.open.some(p => p[0] === station[0] && p[1] === station[1]), "station spot is not a pickup spot");
   });
 }
