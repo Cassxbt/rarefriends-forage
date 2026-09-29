@@ -2,7 +2,7 @@
 
 Forage's own source is MIT licensed (see LICENSE).
 
-`vendor/rarefriends-friendsdk-0.1.3.tgz` is FriendSDK 0.1.3, built unmodified from
+`vendor/rarefriends-friendsdk-0.1.3.tgz` is FriendSDK 0.1.3, packed unmodified (`npm pack`) from
 [spokesz/friendsdk](https://github.com/spokesz/friendsdk) at commit `f34f405` and
 licensed under Apache-2.0. Its notices ship inside the archive.
 
