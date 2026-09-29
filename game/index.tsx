@@ -9,7 +9,7 @@ import { createFriendSoundKit, type FriendSoundCue, type FriendSoundKit } from "
 import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTraits, withTimeout } from "./friend-chain.ts";
 import { buildWorld, screen } from "./world.ts";
 import {
-  accrualRate, deriveVitals, pullRadius, pullStep, TREAT_PULL, BASE_REACH, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
+  accrualRate, deriveVitals, splitValue, pullRadius, pullStep, TREAT_PULL, BASE_REACH, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
   short, sparkStep, toMilestones,
   type FriendState, type FriendTraits, type Milestone, type WorldPoint,
 } from "./vitals.ts";
@@ -20,9 +20,13 @@ import "./style.css";
 const POLL_MS = 15_000;
 const TRAITS_TIMEOUT_MS = 8_000;
 const PULL_SPEED = 180;
+/** After this many sparks, real earnings are held back briefly and arrive as one golden spark. */
+const GOLDEN_EVERY = 4;
+const GOLDEN_HOLD_MS = 40_000;
+const GOLDEN_MS = 12_000;
 
 type Menu = "den" | "treats" | "proof" | "reward" | "settings" | null;
-type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark"; taken: boolean };
+type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark" | "golden"; taken: boolean; expiresAt?: number };
 type Trip = { number: number; carried: bigint; pickups: number };
 type History = { milestones: Milestone[]; times: Map<bigint, number> };
 
@@ -43,6 +47,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [pickups, setPickups] = useState<Pickup[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [sparkBase, setSparkBase] = useState<bigint | null>(null);
+  const [streak, setStreak] = useState(0), [holdSince, setHoldSince] = useState<number | null>(null);
   const [result, setResult] = useState<GamePlay | null>(null);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
   const [muted, setMuted] = useState(true), [reducedMotion, setReducedMotion] = useState(false);
@@ -56,7 +61,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const version = ++epoch.current;
     sound.current = createFriendSoundKit({ muted: true });
     setTraits(null); setState(null); setHistory(null); setSnapshot(null); setMenu(null); setPickups([]); setTrips([]);
-    setSparkBase(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false;
+    setSparkBase(null); setStreak(0); setHoldSince(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false;
     const alive = () => version === epoch.current;
     client.read().then(value => alive() && setSnapshot(value)).catch(cause => alive() && setError(String(cause?.message ?? cause)));
     withTimeout(readFriendTraits(friendId), TRAITS_TIMEOUT_MS, "Reading this Friend's world").then(value => alive() && setTraits(value))
@@ -112,12 +117,33 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       return;
     }
     if (step.kind !== "spark" || !vitals?.awake) return;
+    const golden = streak >= GOLDEN_EVERY;
+    if (golden && holdSince === null) { setHoldSince(state.readAt); return; }
+    if (golden && state.readAt - holdSince! < GOLDEN_HOLD_MS) return;
     const [at] = pickSpots(scene.open, 1, Number(state.block % 2_147_483_647n), [...scene.stations, ...pickups.map(p => p.at)]);
     if (!at) return;
-    setPickups(current => [...current, { id: `spark-${state.block}`, at, value: step.value, kind: "spark", taken: false }]);
+    setPickups(current => [...current, golden
+      ? { id: `golden-${state.block}`, at, value: step.value, kind: "golden", taken: false, expiresAt: Date.now() + GOLDEN_MS }
+      : { id: `spark-${state.block}`, at, value: step.value, kind: "spark", taken: false }]);
     setSparkBase(state.earnedRf);
-    sound.current?.play("action-ready");
-  }, [scene, state, sparkBase, vitals?.awake, pickups]);
+    setStreak(golden ? 0 : streak + 1);
+    setHoldSince(null);
+    sound.current?.play(golden ? "anticipation" : "action-ready");
+    if (golden) setMessage(`A golden spark: ${formatRf(step.value)} RF of real earnings held back for it. Grab it before it scatters.`);
+  }, [scene, state, sparkBase, vitals?.awake, pickups, streak, holdSince]);
+
+  // A missed golden spark scatters into three sparks worth exactly the same; nothing is lost.
+  useEffect(() => {
+    if (!scene) return;
+    const expired = pickups.find(p => p.kind === "golden" && !p.taken && (p.expiresAt ?? Infinity) <= now);
+    if (!expired) return;
+    const spots = pickSpots(scene.open.filter(p => Math.hypot(p[0] - expired.at[0], p[1] - expired.at[1]) < 90), 3, now % 2_147_483_647,
+      [...scene.stations, ...pickups.filter(p => p.id !== expired.id).map(p => p.at)]);
+    const values = splitValue(expired.value, Math.max(1, spots.length));
+    setPickups(current => [...current.filter(p => p.id !== expired.id),
+      ...(spots.length ? spots : [expired.at]).map((at, i) => ({ id: `${expired.id}-${i}`, at, value: values[i], kind: "spark" as const, taken: false }))]);
+    setMessage("The golden spark scattered. Its value is still on the ground.");
+  }, [now, pickups, scene]);
 
   const reach = pullRadius(snapshot?.inventory ?? []);
 
@@ -142,7 +168,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         });
         if (moved) {
           setPickups(next);
-          if (collected) sound.current?.play((collected as Pickup).kind === "spark" ? "reveal-rare" : "select");
+          if (collected) sound.current?.play({ golden: "reveal-legendary", spark: "reveal-rare", pouch: "select" }[(collected as Pickup).kind] as FriendSoundCue);
           return;
         }
       }
@@ -206,7 +232,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       <GameWorld world={scene.world} spawn={scene.spawn} interactions={scene.interactions} friendId={friendId}
         paused={Boolean(menu) || paused} reducedMotion={reducedMotion} onInteract={id => navigate(id as Menu, true)} />
       <div className="forage-pickups" aria-hidden="true"><div className="forage-surface">
-        {pickups.filter(p => !p.taken).map(p => <span key={p.id} className={`forage-pickup forage-${p.kind}${reducedMotion ? "" : " forage-bob"}`} style={screen(p.at)} />)}
+        {pickups.filter(p => !p.taken).map(p => <span key={p.id} className={`forage-pickup forage-${p.kind}${reducedMotion ? "" : " forage-bob"}`} style={screen(p.at)}>
+          {p.kind === "golden" && <b>{Math.max(0, Math.ceil(((p.expiresAt ?? now) - now) / 1000))}</b>}</span>)}
       </div></div>
       <div className="forage-hud">
         <div className="forage-card">

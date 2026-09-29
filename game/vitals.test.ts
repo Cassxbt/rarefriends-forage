@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, pullRadius, pullStep, reactivationCost, sceneryPreset, sparkStep, toMilestones, BASE_REACH, MAX_PULL,
+  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, sparkStep, toMilestones, BASE_REACH, MAX_PULL,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -125,4 +125,10 @@ test("pickups inside the pull glide in and are collected at base reach", () => {
   assert.equal(pullStep([100, 0], [0, 0], 50, 5), null, "outside the pull stays put");
   assert.deepEqual(pullStep([40, 0], [0, 0], 50, 5), [35, 0], "inside the pull moves closer");
   assert.equal(pullStep([BASE_REACH, 0], [0, 0], 50, 5), "collected");
+});
+
+test("a missed golden spark scatters into parts worth exactly the same", () => {
+  const parts = splitValue(10n * RF + 1n, 3);
+  assert.equal(parts.length, 3);
+  assert.equal(parts.reduce((a, b) => a + b, 0n), 10n * RF + 1n);
 });

@@ -162,3 +162,16 @@ test("the memory wall replays history once, even when ownership cycles", { timeo
   assert.equal(new Set(await game.locator(".forage-wall li code").allInnerTexts()).size, 4, "each milestone appears once");
   assert.deepEqual(errors, []);
 });
+
+test("a golden spark holds back real earnings, then scatters into three sparks if missed", { timeout: 300_000 }, async () => {
+  const { game, errors, fixture } = await open(createChain());
+  const golden = game.locator(".forage-golden");
+  await golden.waitFor({ timeout: 200_000 });
+  await game.getByText(/A golden spark: [\d.,]+ RF of real earnings held back/).waitFor();
+  const sparksBefore = await game.locator(".forage-spark").count();
+  await golden.waitFor({ state: "detached", timeout: 20_000 });
+  await game.getByText("The golden spark scattered. Its value is still on the ground.").waitFor();
+  assert.equal(await game.locator(".forage-spark").count(), sparksBefore + 3);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(fixture.errors, []);
+});

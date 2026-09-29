@@ -102,6 +102,12 @@ export function pullStep(at: WorldPoint, friend: WorldPoint, radius: number, spe
   return [at[0] + (dx / distance) * step, at[1] + (dy / distance) * step];
 }
 
+/** Splits a value into parts that add back up exactly; the last part takes the remainder. */
+export function splitValue(value: bigint, parts: number): bigint[] {
+  const each = value / BigInt(parts);
+  return Array.from({ length: parts }, (_, i) => i === parts - 1 ? value - each * BigInt(parts - 1) : each);
+}
+
 export function pouchPickups(earned: bigint): Readonly<{ count: number; each: bigint }> {
   if (earned <= 0n) return { count: 0, each: 0n };
   const count = Math.min(MAX_POUCH_PICKUPS, Number((earned + POUCH_PICKUP_UNIT - 1n) / POUCH_PICKUP_UNIT));

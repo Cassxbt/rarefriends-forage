@@ -30,3 +30,5 @@
 .forage-reward { text-align: center; }
 @media (prefers-reduced-motion: reduce) { .forage-bob { animation: none; } }
 .forage-toast { position: absolute; left: 50%; bottom: 140px; transform: translateX(-50%); max-width: 70%; margin: 0; padding: 8px 12px; background: #111; color: #f4f4f0; text-align: center; }
+.forage-golden { width: 22px; height: 22px; margin: -28px 0 0 -11px; background: #ffc400; box-shadow: 0 0 0 2px #fff, 0 0 14px 4px #ffc400; }
+.forage-golden b { display: block; transform: rotate(-45deg); font-size: 10px; line-height: 22px; text-align: center; color: #111; }
