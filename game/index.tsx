@@ -99,8 +99,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     if (state.earnedRf < sparkBase) { setSparkBase(state.earnedRf); setSparksSpawned(0); return; }
     const due = sparksSince(sparkBase, state.earnedRf);
     if (due <= sparksSpawned) return;
-    const taken = pickups.map(p => p.at);
-    const fresh = pickSpots(scene.open, due - sparksSpawned, Number(state.block % 2_147_483_647n), [...scene.stations, ...taken]);
+    const occupied = pickups.map(p => p.at);
+    const fresh = pickSpots(scene.open, due - sparksSpawned, Number(state.block % 2_147_483_647n), [...scene.stations, ...occupied]);
     setPickups(current => [...current, ...fresh.map((at, i) => ({ id: `spark-${sparksSpawned + i}-${state.block}`, at, value: SPARK_UNIT, kind: "spark" as const, taken: false }))]);
     setSparksSpawned(due);
     sound.current?.play("action-ready");
@@ -126,8 +126,10 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const carried = carrying.reduce((sum, p) => sum + p.value, 0n);
   const remaining = pickups.filter(p => !p.taken).length;
 
+  const broughtHome = trips.reduce((sum, t) => sum + t.carried, 0n);
+
   function bringHome() {
-    if (carrying.length === 0) return;
+    if (carrying.length === 0 || paused) return;
     setTrips(current => [...current, { number: current.length + 1, carried, pickups: carrying.length }]);
     setPickups(current => current.filter(p => !p.taken));
     sound.current?.play("reward");
@@ -165,9 +167,9 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     <div className="forage-world" ref={worldRef} inert={Boolean(menu) || paused || undefined}>
       <GameWorld world={scene.world} spawn={scene.spawn} interactions={scene.interactions} friendId={friendId}
         paused={Boolean(menu) || paused} reducedMotion={reducedMotion} onInteract={id => navigate(id as Menu)} />
-      <div className="forage-pickups" aria-hidden="true">
+      <div className="forage-pickups" aria-hidden="true"><div className="forage-surface">
         {pickups.filter(p => !p.taken).map(p => <span key={p.id} className={`forage-pickup forage-${p.kind}${reducedMotion ? "" : " forage-bob"}`} style={screen(p.at)} />)}
-      </div>
+      </div></div>
       <div className="forage-hud">
         <div className="forage-card">
           <strong>Friend #{friendId.toString()} · {traits?.character || "Friend"}</strong>
@@ -182,7 +184,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <div className="forage-card">
           <span>Carrying {carrying.length} · {formatRf(carried)} RF</span>
           <span>{remaining ? `${remaining} to gather` : vitals?.awake ? "Waiting for fresh sparks" : "Nothing to gather"}</span>
-          <span>Trips home: {trips.length}</span>
+          <span>Brought home: {trips.length} {trips.length === 1 ? "trip" : "trips"} · {formatRf(broughtHome)} RF</span>
         </div>
       </div>
       <div className="forage-actions">
@@ -196,7 +198,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     {menu && <GameMenu title={{ den: "Den", treats: "Treat stand", proof: "Proof board", reward: "Your treat", settings: "Settings" }[menu]} onClose={busy ? undefined : () => navigate(null)}>
       {menu === "den" ? <>
         {carrying.length > 0
-          ? <button type="button" className="rf-frame-primary" onClick={bringHome}>Bring {carrying.length} home · {formatRf(carried)} RF</button>
+          ? <button type="button" className="rf-frame-primary" disabled={paused} onClick={bringHome}>Bring {carrying.length} home · {formatRf(carried)} RF</button>
           : <p>{remaining ? "Go gather what your Friend earned, then bring it home." : "Nothing carried yet."}</p>}
         {state && !vitals?.awake && <p className="forage-rest">This Friend is resting: its activation is cleared, so it isn't earning and can't gather. Reactivating a generation {state.generation} Friend costs {reactivation ?? "?"} RF on rarefriends.com. It stays fully playable here.</p>}
         <h3>Memory wall</h3>
@@ -204,7 +206,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         {historyError ? <p role="alert">History unavailable: {historyError}</p> : !history ? <p>Reading history…</p> :
           <ol className="forage-wall">{history.milestones.map(m => <li key={`${m.tx}-${m.kind}`}>
             <strong>{m.title}</strong><span>{when(history.times.get(m.block))} · block {m.block.toLocaleString("en-US")}</span>
-            <span>{m.detail}</span><code title={`${EXPLORER}/tx/${m.tx}`}>tx {short(m.tx)}</code></li>)}
+            <span>{m.detail}</span><code className="forage-hash">{EXPLORER.replace("https://", "")}/tx/{m.tx}</code></li>)}
             {trips.map(t => <li key={`trip-${t.number}`} className="forage-trip"><strong>Trip {t.number} home</strong>
               <span>{t.pickups} pickups · {formatRf(t.carried)} RF carried</span><span>This session only. Care isn't saved on-chain.</span></li>)}
           </ol>}
