@@ -2,16 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameComponentProps } from "@rarefriends/friendsdk/runtime";
-import { GameWorld, type GameWorldInteraction } from "@rarefriends/friendsdk/world-view";
-import { getWorldPreset, isWorldWalkable, project, validateWorld } from "@rarefriends/friendsdk/world";
-import { createWorldNavigator } from "@rarefriends/friendsdk/navigation";
+import { GameWorld } from "@rarefriends/friendsdk/world-view";
 import { GameMenu } from "@rarefriends/friendsdk/frame";
 import { maximumPrize, type GamePlay, type GameSnapshot } from "@rarefriends/friendsdk/game";
 import { createFriendSoundKit, type FriendSoundCue, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTraits } from "./friend-chain.ts";
+import { buildWorld, screen } from "./world.ts";
 import {
   SPARK_UNIT, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
-  sceneryPreset, short, sparksSince, toMilestones,
+  short, sparksSince, toMilestones,
   type FriendState, type FriendTraits, type Milestone, type WorldPoint,
 } from "./vitals.ts";
 import "@rarefriends/friendsdk/frame.css";
@@ -20,43 +19,11 @@ import "./style.css";
 
 const POLL_MS = 15_000;
 const GATHER_RADIUS = 20;
-const VIEW_OFFSET = [320, 330] as const;
 
 type Menu = "den" | "treats" | "proof" | "reward" | "settings" | null;
 type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark"; taken: boolean };
 type Trip = { number: number; carried: bigint; pickups: number };
 type History = { milestones: Milestone[]; times: Map<bigint, number> };
-
-/** Builds this Friend's own world once: its on-chain scenery, three stations, and every reachable spot. */
-function buildWorld(scenery: string) {
-  const { id, matched } = sceneryPreset(scenery);
-  const base = getWorldPreset(id);
-  const bare = validateWorld({ ...base, actors: [] });
-  const walkable: WorldPoint[] = [];
-  for (let x = 12; x < 576; x += 12) for (let y = 12; y < 384; y += 12) if (isWorldWalkable(bare, [x, y], 10)) walkable.push([x, y]);
-  const cx = walkable.reduce((sum, p) => sum + p[0], 0) / walkable.length, cy = walkable.reduce((sum, p) => sum + p[1], 0) / walkable.length;
-  const byCenter = [...walkable].sort((a, b) => Math.hypot(a[0] - cx, a[1] - cy) - Math.hypot(b[0] - cx, b[1] - cy));
-  const spawn = byCenter[0];
-  const navigator = createWorldNavigator(bare);
-  const reachable = walkable.filter(point => (navigator.route(spawn, point)?.length ?? 0) > 0);
-  const [den, treats, proof] = pickSpots(reachable.filter(p => Math.hypot(p[0] - spawn[0], p[1] - spawn[1]) < 140), 3, 7, [spawn], 70);
-  const world = validateWorld({ ...bare, props: [...bare.props,
-    { type: "bench", x: den[0], y: den[1] - 18, scale: 1.2 },
-    { type: "crate", x: treats[0], y: treats[1] - 18, scale: 1.3 },
-    { type: "terminal", x: proof[0], y: proof[1] - 18, scale: 1.3 }] });
-  const open = reachable.filter(point => isWorldWalkable(world, point, 10));
-  const interactions: GameWorldInteraction[] = [
-    { id: "den", label: "Den", position: den, reach: 80, labelOffset: -150 },
-    { id: "treats", label: "Treat stand", position: treats, reach: 80, labelOffset: -150 },
-    { id: "proof", label: "Proof board", position: proof, reach: 80, labelOffset: -150 },
-  ];
-  return { world, spawn, open, stations: [den, treats, proof], interactions, name: base.name as string, matched };
-}
-
-function screen(point: WorldPoint) {
-  const [x, y] = project(point[0], point[1]);
-  return { left: `${((x - VIEW_OFFSET[0]) / 960) * 100}%`, top: `${((y - VIEW_OFFSET[1]) / 640) * 100}%` };
-}
 
 const when = (time?: number) => time ? new Date(time).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "";
 

@@ -10,7 +10,7 @@
     "dev": "friendsdk dev ./game",
     "build": "friendsdk build ./game --outdir dist",
     "check": "friendsdk check ./game",
-    "test": "node --test game/vitals.test.ts",
+    "test": "node --test game/vitals.test.ts game/world.test.ts",
     "test:live": "FORAGE_LIVE=1 node --test game/live.test.ts",
     "typecheck": "tsc --noEmit"
   },
