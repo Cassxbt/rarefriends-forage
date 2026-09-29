@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  RF, SPARK_UNIT, MAX_POUCH_PICKUPS, MAX_SPARKS, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, reactivationCost, sceneryPreset, sparksSince, toMilestones,
+  RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
+  projectEarned, reactivationCost, sceneryPreset, sparkStep, toMilestones,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -57,10 +57,18 @@ test("projected pouch never goes backwards between reads", () => {
   assert.equal(projectEarned(friend, 100n, friend.readAt + 3_000), friend.earnedRf + 300n);
 });
 
-test("sparks count fresh accrual, cap, and reset on claim", () => {
-  assert.equal(sparksSince(RF, RF + SPARK_UNIT * 3n), 3);
-  assert.equal(sparksSince(RF, RF + SPARK_UNIT * 99n), MAX_SPARKS);
-  assert.equal(sparksSince(RF, RF / 2n), 0);
+test("a spark carries exactly what was earned since the last one", () => {
+  assert.deepEqual(sparkStep(RF, RF + 3n, 0), { kind: "spark", value: 3n });
+  assert.deepEqual(sparkStep(RF, RF, 0), { kind: "none" });
+});
+
+test("a full ground holds earnings back for the next spark", () => {
+  assert.deepEqual(sparkStep(RF, RF * 2n, MAX_SPARKS_ON_GROUND), { kind: "none" });
+  assert.deepEqual(sparkStep(RF, RF * 2n, MAX_SPARKS_ON_GROUND - 1), { kind: "spark", value: RF });
+});
+
+test("falling earnings read as a claim", () => {
+  assert.deepEqual(sparkStep(RF, RF / 2n, 0), { kind: "claimed" });
 });
 
 test("pouch splits into bounded pickups that add back up", () => {

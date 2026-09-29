@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createWorldNavigator } from "@rarefriends/friendsdk/navigation";
 import { buildWorld } from "./world.ts";
-import { MAX_POUCH_PICKUPS, MAX_SPARKS } from "./vitals.ts";
+import { MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND } from "./vitals.ts";
 
 const SCENERIES = ["Garden", "Circuit", "Crystal", "Rooftop", "Tidal", "Orbital", ""];
 
@@ -14,7 +14,7 @@ for (const scenery of SCENERIES) {
     assert.ok(elapsed < 1500, `built in ${elapsed.toFixed(0)} ms`);
     assert.equal(scene.matched, scenery !== "");
     assert.equal(new Set(scene.stations.map(String)).size, 3);
-    assert.ok(scene.open.length >= MAX_POUCH_PICKUPS + MAX_SPARKS, `${scene.open.length} open spots`);
+    assert.ok(scene.open.length >= MAX_POUCH_PICKUPS + MAX_SPARKS_ON_GROUND, `${scene.open.length} open spots`);
 
     const navigator = createWorldNavigator(scene.world);
     const sample = scene.open.filter((_, i) => i % Math.ceil(scene.open.length / 12) === 0);

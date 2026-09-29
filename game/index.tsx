@@ -9,8 +9,8 @@ import { createFriendSoundKit, type FriendSoundCue, type FriendSoundKit } from "
 import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTraits, withTimeout } from "./friend-chain.ts";
 import { buildWorld, screen } from "./world.ts";
 import {
-  SPARK_UNIT, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
-  short, sparksSince, toMilestones,
+  accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
+  short, sparkStep, toMilestones,
   type FriendState, type FriendTraits, type Milestone, type WorldPoint,
 } from "./vitals.ts";
 import "@rarefriends/friendsdk/frame.css";
@@ -41,7 +41,6 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [pickups, setPickups] = useState<Pickup[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [sparkBase, setSparkBase] = useState<bigint | null>(null);
-  const [sparksSpawned, setSparksSpawned] = useState(0);
   const [result, setResult] = useState<GamePlay | null>(null);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
   const [muted, setMuted] = useState(true), [reducedMotion, setReducedMotion] = useState(false);
@@ -55,7 +54,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const version = ++epoch.current;
     sound.current = createFriendSoundKit({ muted: true });
     setTraits(null); setState(null); setHistory(null); setSnapshot(null); setMenu(null); setPickups([]); setTrips([]);
-    setSparkBase(null); setSparksSpawned(0); setChainError(""); setHistoryError(""); setMuted(true); locked.current = false;
+    setSparkBase(null); setChainError(""); setHistoryError(""); setMuted(true); locked.current = false;
     const alive = () => version === epoch.current;
     client.read().then(value => alive() && setSnapshot(value)).catch(cause => alive() && setError(String(cause?.message ?? cause)));
     withTimeout(readFriendTraits(friendId), TRAITS_TIMEOUT_MS, "Reading this Friend's world").then(value => alive() && setTraits(value))
@@ -94,17 +93,23 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     setPickups(spots.map((at, i) => ({ id: `pouch-${i}`, at, value: each, kind: "pouch", taken: false })));
   }, [scene, state, sparkBase, vitals?.awake, friendId]);
 
+  // Only real new earnings grow the ground; a claim on rarefriends.com empties it.
   useEffect(() => {
-    if (!scene || !state || sparkBase === null || !vitals?.awake) return;
-    if (state.earnedRf < sparkBase) { setSparkBase(state.earnedRf); setSparksSpawned(0); return; }
-    const due = sparksSince(sparkBase, state.earnedRf);
-    if (due <= sparksSpawned) return;
-    const occupied = pickups.map(p => p.at);
-    const fresh = pickSpots(scene.open, due - sparksSpawned, Number(state.block % 2_147_483_647n), [...scene.stations, ...occupied]);
-    setPickups(current => [...current, ...fresh.map((at, i) => ({ id: `spark-${sparksSpawned + i}-${state.block}`, at, value: SPARK_UNIT, kind: "spark" as const, taken: false }))]);
-    setSparksSpawned(due);
+    if (!scene || !state || sparkBase === null) return;
+    const step = sparkStep(sparkBase, state.earnedRf, pickups.filter(p => p.kind === "spark" && !p.taken).length);
+    if (step.kind === "claimed") {
+      setSparkBase(state.earnedRf);
+      setPickups(current => current.filter(p => p.taken));
+      setMessage("Its rewards were claimed, so the ground is clear. New earnings will spark here.");
+      return;
+    }
+    if (step.kind !== "spark" || !vitals?.awake) return;
+    const [at] = pickSpots(scene.open, 1, Number(state.block % 2_147_483_647n), [...scene.stations, ...pickups.map(p => p.at)]);
+    if (!at) return;
+    setPickups(current => [...current, { id: `spark-${state.block}`, at, value: step.value, kind: "spark", taken: false }]);
+    setSparkBase(state.earnedRf);
     sound.current?.play("action-ready");
-  }, [scene, state, sparkBase, sparksSpawned, vitals?.awake, pickups]);
+  }, [scene, state, sparkBase, vitals?.awake, pickups]);
 
   useEffect(() => {
     if (!pickups.some(p => !p.taken)) return;
@@ -162,6 +167,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const status = chainError ? "Can't see your Friend's chain state right now" : !state ? "Reading the chain…" : vitals?.awake ? "Awake · earning" : "Resting · not earning";
   const feedback = <p role={error ? "alert" : "status"}>{error || message || (busy ? "Waiting for preview confirmation…" : "Treats are simulated RF. Chain readings are live and read-only.")}</p>;
   const reactivation = state ? reactivationCost(state.generation) : null;
+  const nextCheck = state ? Math.max(0, Math.ceil((state.readAt + POLL_MS - now) / 1000)) : 0;
 
   return <section className="forage" aria-label="Forage" aria-busy={busy}>
     <div className="forage-world" ref={worldRef} inert={Boolean(menu) || paused || undefined}>
@@ -183,7 +189,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         </div>
         <div className="forage-card">
           <span>Carrying {carrying.length} · {formatRf(carried)} RF</span>
-          <span>{remaining ? `${remaining} to gather` : vitals?.awake ? "Waiting for fresh sparks" : "Nothing to gather"}</span>
+          <span>{remaining ? `${remaining} to gather` : vitals?.awake ? `Can't carry what it hasn't earned · next check ${nextCheck}s` : "Resting: nothing to gather"}</span>
           <span>Brought home: {trips.length} {trips.length === 1 ? "trip" : "trips"} · {formatRf(broughtHome)} RF</span>
         </div>
       </div>

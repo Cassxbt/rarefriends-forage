@@ -1,8 +1,7 @@
 export const RF = 10n ** 18n;
-export const SPARK_UNIT = 10n ** 16n;
 export const POUCH_PICKUP_UNIT = RF / 2n;
 export const MAX_POUCH_PICKUPS = 12;
-export const MAX_SPARKS = 6;
+export const MAX_SPARKS_ON_GROUND = 6;
 
 export type Address = `0x${string}`;
 export type Hash = `0x${string}`;
@@ -72,10 +71,16 @@ export function projectEarned(latest: FriendState, ratePerSecond: bigint, now: n
   return latest.earnedRf + ratePerSecond * elapsed;
 }
 
-/** Fresh sparks accrued since the session baseline. A claim resets to zero; the caller rebases. */
-export function sparksSince(baseline: bigint, current: bigint): number {
-  if (current <= baseline) return 0;
-  return Math.min(MAX_SPARKS, Number((current - baseline) / SPARK_UNIT));
+export type SparkStep = Readonly<{ kind: "claimed" } | { kind: "spark"; value: bigint } | { kind: "none" }>;
+
+/**
+ * A spark holds everything earned since the last one, so slow earners still see sparks and nothing is invented.
+ * Earnings falling means they were claimed; while the ground is full, new earnings roll into the next spark.
+ */
+export function sparkStep(base: bigint, current: bigint, onGround: number): SparkStep {
+  if (current < base) return { kind: "claimed" };
+  if (current === base || onGround >= MAX_SPARKS_ON_GROUND) return { kind: "none" };
+  return { kind: "spark", value: current - base };
 }
 
 export function pouchPickups(earned: bigint): Readonly<{ count: number; each: bigint }> {
