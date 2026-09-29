@@ -31,7 +31,15 @@ const ACTIVATED = parseAbiItem("event Activated(address indexed collection, uint
 export const chain = createPublicClient({ transport: http(RPC_URL, { retryCount: 2, timeout: 15_000 }) });
 
 let wethAddress: Promise<Address> | null = null;
-const weth = () => (wethAddress ??= chain.readContract({ address: CONTRACTS.activationManager, abi, functionName: "weth" }));
+const weth = () => (wethAddress ??= chain.readContract({ address: CONTRACTS.activationManager, abi, functionName: "weth" })
+  .catch(cause => { wethAddress = null; throw cause; }));
+
+/** Rejects after `ms` so a slow RPC call can't hold the game on its loading screen. */
+export function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms); });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
 
 /** One consistent read at the latest block. The public RPC keeps only recent state, so never read older blocks. */
 export async function readFriendState(friendId: bigint): Promise<FriendState> {

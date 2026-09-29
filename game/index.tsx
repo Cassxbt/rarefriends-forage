@@ -6,7 +6,7 @@ import { GameWorld } from "@rarefriends/friendsdk/world-view";
 import { GameMenu } from "@rarefriends/friendsdk/frame";
 import { maximumPrize, type GamePlay, type GameSnapshot } from "@rarefriends/friendsdk/game";
 import { createFriendSoundKit, type FriendSoundCue, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
-import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTraits } from "./friend-chain.ts";
+import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTraits, withTimeout } from "./friend-chain.ts";
 import { buildWorld, screen } from "./world.ts";
 import {
   SPARK_UNIT, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
@@ -18,6 +18,7 @@ import "@rarefriends/friendsdk/world-view.css";
 import "./style.css";
 
 const POLL_MS = 15_000;
+const TRAITS_TIMEOUT_MS = 8_000;
 const GATHER_RADIUS = 20;
 
 type Menu = "den" | "treats" | "proof" | "reward" | "settings" | null;
@@ -57,8 +58,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     setSparkBase(null); setSparksSpawned(0); setChainError(""); setHistoryError(""); setMuted(true); locked.current = false;
     const alive = () => version === epoch.current;
     client.read().then(value => alive() && setSnapshot(value)).catch(cause => alive() && setError(String(cause?.message ?? cause)));
-    readFriendTraits(friendId).then(value => alive() && setTraits(value))
-      .catch(() => alive() && setTraits({ character: "", scenery: "", floor: "", state: "" }));
+    withTimeout(readFriendTraits(friendId), TRAITS_TIMEOUT_MS, "Reading this Friend's world").then(value => alive() && setTraits(value))
+      .catch(cause => { if (!alive()) return; setTraits({ character: "", scenery: "", floor: "", state: "" }); setChainError(cause instanceof Error ? cause.message.split("\n")[0] : "World could not be read."); });
     let previous: FriendState | null = null;
     const poll = () => readFriendState(friendId).then(next => {
       if (!alive()) return;
