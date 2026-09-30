@@ -145,7 +145,7 @@ test("an earning Friend gathers in its own world and only real events change the
   await game.getByText(/rewards were claimed/).waitFor();
   assert.equal(await pickups(), 0, "a claim clears the ground");
   await game.getByText(/^Carrying 0 /).waitFor({ timeout: 5_000 });
-  await game.getByText(/First Forage · Waiting for new earnings to gather · next check \d+s/).waitFor();
+  await game.getByText(/First Forage · Waiting for new earnings · next check \d+s/).waitFor();
   assert.deepEqual(errors, []);
   assert.deepEqual(fixture.errors, []);
 });

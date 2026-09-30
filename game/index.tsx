@@ -7,7 +7,7 @@ import { GameMenu } from "@rarefriends/friendsdk/frame";
 import { maximumPrize, type GamePlay, type GameSnapshot } from "@rarefriends/friendsdk/game";
 import { createFriendSoundKit, type FriendSoundCue, type FriendSoundKit } from "@rarefriends/friendsdk/sounds";
 import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTraits, withTimeout } from "./friend-chain.ts";
-import { buildWorld, screen } from "./world.ts";
+import { buildWorld, screen, viewPosition } from "./world.ts";
 import {
   accrualRate, deriveVitals, splitValue, pullRadius, pullStep, TREAT_PULL, BASE_REACH, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
   short, reconcile, toMilestones, advanceJourney, gatherTarget, reactionFor, JOURNEY_START, type Journey,
@@ -169,7 +169,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   useEffect(() => {
     if (journey.stage !== "done" || receipt || !state) return;
     setReceipt({ ...session, endBlock: state.block, trips: trips.length, broughtHome: trips.reduce((sum, t) => sum + t.carried, 0n) });
-    setReacting(true); setMenu("receipt");
+    setReacting(true); setMenu("receipt"); setMessage("");
     sound.current?.play("reveal-legendary");
   }, [journey.stage, receipt, session, state, trips]);
 
@@ -232,6 +232,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
             setSession(current => ({ ...current, gathered: current.gathered + collected.length, gatheredRf: current.gatheredRf + value }));
             setJourney(current => advanceJourney(current, { type: "collect", born: collected.map(p => p.born), left }));
             const kind = collected.some(p => p.kind === "golden") ? "golden" : collected.some(p => p.kind === "spark") ? "spark" : "pouch";
+            if (kind === "golden") setMessage("");
             sound.current?.play(({ golden: "reveal-legendary", spark: "reveal-rare", pouch: "select" } as const)[kind]);
           }
           return;
@@ -315,11 +316,11 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const reactivation = state ? reactivationCost(state.generation) : null;
   const nextCheck = state ? Math.max(0, Math.ceil((state.readAt + POLL_MS - now) / 1000)) : 0;
   const objective = {
-    gather: target === 0 ? `Waiting for new earnings to gather · next check ${nextCheck}s` : `Gather ${target} of what it earned (${Math.min(journey.gathered, target)}/${target})`,
+    gather: target === 0 ? `Waiting for new earnings · next check ${nextCheck}s` : `Gather ${target} of what it earned (${Math.min(journey.gathered, target)}/${target})`,
     home: "Bring them home to the Den",
     spark: freshOnGround ? "Catch one fresh spark of new earnings"
-      : holdSince !== null ? "Catch one fresh spark · new earnings are being held for a golden spark"
-      : `Catch one fresh spark · waiting for new earnings, next check ${nextCheck}s`,
+      : holdSince !== null ? "Catch one fresh spark · held back for a golden one"
+      : `Catch one fresh spark · next check ${nextCheck}s`,
     done: "",
   }[journey.stage];
 
@@ -363,7 +364,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       {journey.stage !== "done" && state && <p className="forage-journey">{!active
         ? "First Forage waits: your Friend is resting, out of the reward pool, so nothing new can be gathered."
         : `First Forage · ${objective}`}</p>}
-      {reacting && friendAt && <div className="forage-bubble" style={screen(friendAt, 0, -120)}>{reactionFor(traits?.character ?? "")}</div>}
+      {reacting && friendAt && <div className="forage-bubble" style={screen(friendAt, bubbleShift(friendAt), -120)}>{reactionFor(traits?.character ?? "")}</div>}
       <p className="forage-hint">WASD / arrows or tap to walk · walk into glowing pickups · E at the Den, Treat stand or Proof board</p>
     </div>
 
@@ -437,6 +438,12 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       </> : null}{feedback}
     </GameMenu>}
   </section>;
+}
+
+/** Keeps the 240px reaction bubble inside the 960px world when the Friend stands near an edge. */
+function bubbleShift(at: WorldPoint) {
+  const [x] = viewPosition(at);
+  return Math.min(960 - 136, Math.max(136, x)) - x;
 }
 
 function formatGameRf(value: bigint) {
