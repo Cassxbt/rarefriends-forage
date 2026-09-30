@@ -105,18 +105,35 @@ export function pullStep(at: WorldPoint, friend: WorldPoint, radius: number, spe
   return [at[0] + (dx / distance) * step, at[1] + (dy / distance) * step];
 }
 
-export type Journey = Readonly<{ pouchTotal: number; pouchGathered: number; tripsHome: number; sparksAfterHome: number }>;
 export const FIRST_FORAGE_GATHER = 3;
 
 /**
- * First Forage: gather some of what the Friend earned, bring it home, then catch one fresh spark of new earnings.
- * A Friend with nothing waiting (just claimed) starts at the spark step. Returns the current step, 4 when done.
+ * First Forage: gather some of what the Friend earned, bring it home, then catch a pickup that appeared after the trip.
+ * Stages only move forward, except that a claim (which clears the ground and what it carried) restarts gathering.
  */
-export function journeyStep(j: Journey): 1 | 2 | 3 | 4 {
-  const need = Math.min(FIRST_FORAGE_GATHER, j.pouchTotal);
-  if (j.pouchGathered < need) return 1;
-  if (need > 0 && j.tripsHome < 1) return 2;
-  return j.sparksAfterHome < 1 ? 3 : 4;
+export type Journey = Readonly<{ stage: "gather" | "home" | "spark" | "done"; gathered: number; homeBlock: bigint }>;
+export const JOURNEY_START: Journey = { stage: "gather", gathered: 0, homeBlock: 0n };
+/** `born` is the block each collected pickup appeared at; `left` is what remains on the ground to gather. */
+export type JourneyEvent =
+  | { type: "collect"; born: readonly bigint[]; left: number }
+  | { type: "home"; block: bigint; left: number }
+  | { type: "claim" };
+
+/** The gather step never asks for more than was gathered plus what is still on the ground. */
+export const gatherTarget = (j: Journey, left: number) => Math.min(FIRST_FORAGE_GATHER, j.gathered + left);
+
+export function advanceJourney(j: Journey, event: JourneyEvent): Journey {
+  if (j.stage === "done") return j;
+  if (event.type === "claim") return j.stage === "spark" ? j : JOURNEY_START;
+  if (event.type === "home") {
+    const gatheredAll = j.stage === "gather" && j.gathered > 0 && j.gathered >= gatherTarget(j, event.left);
+    return j.stage === "home" || gatheredAll ? { ...j, stage: "spark", homeBlock: event.block } : j;
+  }
+  if (j.stage === "gather") {
+    const next = { ...j, gathered: j.gathered + event.born.length };
+    return next.gathered > 0 && next.gathered >= gatherTarget(next, event.left) ? { ...next, stage: "home" } : next;
+  }
+  return j.stage === "spark" && event.born.some(block => block > j.homeBlock) ? { ...j, stage: "done" } : j;
 }
 
 const REACTIONS: Record<string, string> = {

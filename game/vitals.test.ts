@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, walkTransfers, journeyStep, reactionFor, BASE_REACH, MAX_PULL,
+  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, walkTransfers, advanceJourney, gatherTarget, JOURNEY_START, reactionFor, BASE_REACH, MAX_PULL,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -163,17 +163,51 @@ test("history says when it stopped before the first owner", async () => {
   assert.equal(truncated, true);
 });
 
-test("First Forage: gather three, bring them home, then catch one fresh spark", () => {
-  const j = { pouchTotal: 12, pouchGathered: 0, tripsHome: 0, sparksAfterHome: 0 };
-  assert.equal(journeyStep(j), 1);
-  assert.equal(journeyStep({ ...j, pouchGathered: 3 }), 2);
-  assert.equal(journeyStep({ ...j, pouchGathered: 3, tripsHome: 1 }), 3);
-  assert.equal(journeyStep({ ...j, pouchGathered: 3, tripsHome: 1, sparksAfterHome: 1 }), 4);
+const collect = (born: bigint[], left: number) => ({ type: "collect" as const, born, left });
+const run = (...events: Parameters<typeof advanceJourney>[1][]) => events.reduce(advanceJourney, JOURNEY_START);
+
+test("First Forage: gather three, bring them home, then catch a spark that appeared after the trip", () => {
+  const gathered = run(collect([10n], 11), collect([10n], 10), collect([10n], 9));
+  assert.equal(gathered.stage, "home");
+  const home = advanceJourney(gathered, { type: "home", block: 20n, left: 9 });
+  assert.deepEqual([home.stage, home.homeBlock], ["spark", 20n]);
+  assert.equal(advanceJourney(home, collect([10n], 8)).stage, "spark", "a pickup from before the trip is not a fresh spark");
+  assert.equal(advanceJourney(home, collect([20n], 8)).stage, "spark", "nor one that appeared at the trip's own block");
+  assert.equal(advanceJourney(home, collect([21n], 8)).stage, "done");
 });
 
-test("First Forage with a small or empty pouch never asks for more than exists", () => {
-  assert.equal(journeyStep({ pouchTotal: 1, pouchGathered: 1, tripsHome: 0, sparksAfterHome: 0 }), 2);
-  assert.equal(journeyStep({ pouchTotal: 0, pouchGathered: 0, tripsHome: 0, sparksAfterHome: 0 }), 3, "just claimed: straight to the spark");
+test("First Forage counts every pickup caught in the same frame", () => {
+  const j = run(collect([10n, 10n], 10));
+  assert.equal(j.gathered, 2);
+  assert.equal(run(collect([10n, 10n, 10n], 9)).stage, "home");
+});
+
+test("First Forage never asks for more than exists", () => {
+  assert.equal(run(collect([10n], 0)).stage, "home", "one pickup on the ground: gathering it is enough");
+  assert.equal(gatherTarget(JOURNEY_START, 0), 0, "an empty or just-claimed Friend waits for new earnings");
+  assert.equal(gatherTarget(JOURNEY_START, 12), 3);
+  const early = run(collect([10n], 1), collect([10n], 0));
+  assert.equal(early.stage, "home");
+});
+
+test("First Forage: a trip home with everything gathered finishes the gather step, even below three", () => {
+  const partial = run(collect([10n], 1));
+  assert.equal(partial.stage, "gather");
+  assert.equal(advanceJourney(partial, { type: "home", block: 20n, left: 1 }).stage, "gather", "pickups remain, so keep gathering");
+  assert.equal(advanceJourney(partial, { type: "home", block: 20n, left: 0 }).stage, "spark", "nothing left to gather: the trip counts");
+});
+
+test("a claim restarts gathering, but never undoes a trip home or a finished journey", () => {
+  for (const before of [run(collect([10n], 11)), run(collect([10n, 10n, 10n], 9))]) {
+    const claimed = advanceJourney(before, { type: "claim" });
+    assert.deepEqual(claimed, JOURNEY_START, "the claim cleared the ground and what it carried");
+    assert.equal(gatherTarget(claimed, 0), 0);
+    assert.equal(run(collect([30n], 0)).stage, "home", "the next earnings, once laid out, are gathered from scratch");
+  }
+  const sparkStage = advanceJourney(run(collect([10n, 10n, 10n], 9)), { type: "home", block: 20n, left: 9 });
+  assert.equal(advanceJourney(sparkStage, { type: "claim" }), sparkStage);
+  const done = advanceJourney(sparkStage, collect([25n], 0));
+  assert.equal(advanceJourney(done, { type: "claim" }), done);
 });
 
 test("every character family has its own reaction", () => {

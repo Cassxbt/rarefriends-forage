@@ -10,7 +10,7 @@ import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTrai
 import { buildWorld, screen } from "./world.ts";
 import {
   accrualRate, deriveVitals, splitValue, pullRadius, pullStep, TREAT_PULL, BASE_REACH, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
-  short, reconcile, toMilestones, journeyStep, reactionFor, FIRST_FORAGE_GATHER, type Journey,
+  short, reconcile, toMilestones, advanceJourney, gatherTarget, reactionFor, JOURNEY_START, type Journey,
   type FriendState, type FriendTraits, type Milestone, type WorldPoint,
 } from "./vitals.ts";
 import "@rarefriends/friendsdk/frame.css";
@@ -32,9 +32,13 @@ const TRAIL_MAX = 8;
 const CARRY_LIFT = -58, CARRY_STEP = 12;
 
 type Menu = "den" | "treats" | "proof" | "reward" | "settings" | "receipt" | null;
-type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark" | "golden"; taken: boolean; expiresAt?: number };
+/** `born` is the block of the chain read that showed the earnings this pickup represents. */
+type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark" | "golden"; born: bigint; taken: boolean; expiresAt?: number };
 type Trip = { number: number; carried: bigint; pickups: number };
 type History = { milestones: Milestone[]; times: Map<bigint, number>; truncated: boolean };
+type Session = { startBlock: bigint | null; startEarned: bigint; newSeen: bigint; gathered: number; gatheredRf: bigint; claims: number; restingSeen: boolean };
+type Receipt = Session & { endBlock: bigint; trips: number; broughtHome: bigint };
+const NEW_SESSION: Session = { startBlock: null, startEarned: 0n, newSeen: 0n, gathered: 0, gatheredRf: 0n, claims: 0, restingSeen: false };
 
 const when = (time?: number) => time ? new Date(time).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "";
 
@@ -54,9 +58,9 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [menu, setMenu] = useState<Menu>(null);
   const [pickups, setPickups] = useState<Pickup[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [journey, setJourney] = useState<Journey>({ pouchTotal: 0, pouchGathered: 0, tripsHome: 0, sparksAfterHome: 0 });
-  const [session, setSession] = useState({ startBlock: null as bigint | null, startEarned: 0n, newSeen: 0n, gathered: 0, gatheredRf: 0n, claims: 0, restingSeen: false });
-  const [journeyDone, setJourneyDone] = useState(false), [reacting, setReacting] = useState(false);
+  const [journey, setJourney] = useState<Journey>(JOURNEY_START);
+  const [session, setSession] = useState<Session>(NEW_SESSION);
+  const [receipt, setReceipt] = useState<Receipt | null>(null), [reacting, setReacting] = useState(false);
   const [laidOut, setLaidOut] = useState(false), [homeSinceClaim, setHomeSinceClaim] = useState(0n), [goldensSeen, setGoldensSeen] = useState(0);
   const [streak, setStreak] = useState(0), [holdSince, setHoldSince] = useState<number | null>(null);
   const [result, setResult] = useState<GamePlay | null>(null);
@@ -64,6 +68,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [muted, setMuted] = useState(true), [reducedMotion, setReducedMotion] = useState(false);
   const [retry, setRetry] = useState(0);
   const sound = useRef<FriendSoundKit | null>(null), locked = useRef(false), epoch = useRef(0), worldRef = useRef<HTMLDivElement>(null), historyLoading = useRef(false);
+  const readNow = useRef<(() => void) | null>(null);
   const definition = client.definition;
 
   const scene = useMemo(() => traits ? buildWorld(traits.scenery) : null, [traits]);
@@ -72,9 +77,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const version = ++epoch.current;
     sound.current = createFriendSoundKit({ muted: true });
     setTraits(null); setState(null); setHistory(null); setSnapshot(null); setMenu(null); setPickups([]); setTrips([]);
-    setLaidOut(false); setHomeSinceClaim(0n); setGoldensSeen(0); setStreak(0); setJourneyDone(false); setReacting(false);
-    setJourney({ pouchTotal: 0, pouchGathered: 0, tripsHome: 0, sparksAfterHome: 0 });
-    setSession({ startBlock: null, startEarned: 0n, newSeen: 0n, gathered: 0, gatheredRf: 0n, claims: 0, restingSeen: false }); setHoldSince(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false; historyLoading.current = false;
+    setLaidOut(false); setHomeSinceClaim(0n); setGoldensSeen(0); setStreak(0); setReceipt(null); setReacting(false);
+    setJourney(JOURNEY_START); setSession(NEW_SESSION); setHoldSince(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false; historyLoading.current = false;
     const alive = () => version === epoch.current;
     client.read().then(value => alive() && setSnapshot(value)).catch(cause => alive() && setError(String(cause?.message ?? cause)));
     withTimeout(readFriendTraits(friendId), TRAITS_TIMEOUT_MS, "Reading this Friend's world").then(value => alive() && setTraits(value))
@@ -86,15 +90,18 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       readFriendState(friendId).then(next => {
         if (!alive() || (previous && next.block <= previous.block)) return;
         if (previous) setRate(accrualRate(previous, next));
+        const increase = previous && next.earnedRf > previous.earnedRf ? next.earnedRf - previous.earnedRf : 0n;
+        if (increase) setSession(current => ({ ...current, newSeen: current.newSeen + increase }));
         previous = next; setState(next); setChainError("");
       }).catch(cause => alive() && setChainError(cause instanceof Error ? cause.message.split("\n")[0] : "The chain could not be read."))
         .finally(() => { polling = false; });
     };
     void poll();
+    readNow.current = poll;
     const timer = setInterval(poll, POLL_MS), tick = setInterval(() => setNow(Date.now()), 1000);
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReducedMotion(preference.matches); update(); preference.addEventListener("change", update);
-    return () => { epoch.current++; clearInterval(timer); clearInterval(tick); sound.current?.dispose(); sound.current = null; preference.removeEventListener("change", update); };
+    return () => { epoch.current++; readNow.current = null; clearInterval(timer); clearInterval(tick); sound.current?.dispose(); sound.current = null; preference.removeEventListener("change", update); };
   }, [client, friendId, retry]);
 
   useEffect(() => {
@@ -123,15 +130,15 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       setPickups([]); setHomeSinceClaim(0n); setLaidOut(false); setStreak(0); setHoldSince(null);
       if (hadSomething) setMessage("Its rewards were claimed on-chain, so the ground and everything it carried are cleared.");
       if (hadSomething) setSession(current => ({ ...current, claims: current.claims + 1 }));
+      if (hadSomething) setJourney(current => advanceJourney(current, { type: "claim" }));
       return;
     }
     if (step.kind === "layout") {
       const { count, each } = pouchPickups(step.value);
       const spots = pickSpots(scene.open, count, Number(friendId % 2_147_483_647n), [...scene.stations, scene.spawn]);
       const values = splitValue(step.value, Math.max(1, spots.length));
-      setPickups(current => [...current, ...spots.map((at, i) => ({ id: `pouch-${state.block}-${i}`, at, value: values[i], kind: "pouch" as const, taken: false }))]);
+      setPickups(current => [...current, ...spots.map((at, i) => ({ id: `pouch-${state.block}-${i}`, at, value: values[i], kind: "pouch" as const, born: state.block, taken: false }))]);
       setLaidOut(true);
-      setJourney(current => ({ ...current, pouchTotal: current.pouchTotal + spots.length }));
       return;
     }
     if (step.kind !== "spark") return;
@@ -142,10 +149,9 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const [at] = pickSpots(scene.open, 1, Number(state.block % 2_147_483_647n), [...scene.stations, ...pickups.map(p => p.at)]);
     if (!at) return;
     setPickups(current => [...current, golden
-      ? { id: `golden-${state.block}`, at, value: step.value, kind: "golden", taken: false, expiresAt: Date.now() + GOLDEN_MS }
-      : { id: `spark-${state.block}`, at, value: step.value, kind: "spark", taken: false }]);
+      ? { id: `golden-${state.block}`, at, value: step.value, kind: "golden", born: state.block, taken: false, expiresAt: Date.now() + GOLDEN_MS }
+      : { id: `spark-${state.block}`, at, value: step.value, kind: "spark", born: state.block, taken: false }]);
     setStreak(golden ? 0 : streak + 1);
-    setSession(current => ({ ...current, newSeen: current.newSeen + step.value }));
     setHoldSince(null);
     if (golden) setGoldensSeen(n => n + 1);
     sound.current?.play(golden ? "anticipation" : "action-ready");
@@ -159,22 +165,29 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   }, [state, active]);
 
   // First Forage ends with the Friend's own reaction and a receipt of what the chain showed this session.
+  // The receipt is frozen at the moment of completion, so its end block and totals don't drift afterwards.
   useEffect(() => {
-    if (journeyDone || journeyStep(journey) !== 4) return;
-    setJourneyDone(true); setReacting(true); setMenu("receipt");
+    if (journey.stage !== "done" || receipt || !state) return;
+    setReceipt({ ...session, endBlock: state.block, trips: trips.length, broughtHome: trips.reduce((sum, t) => sum + t.carried, 0n) });
+    setReacting(true); setMenu("receipt");
     sound.current?.play("reveal-legendary");
+  }, [journey.stage, receipt, session, state, trips]);
+
+  useEffect(() => {
+    if (!reacting) return;
     const timer = setTimeout(() => setReacting(false), 6_000);
     return () => clearTimeout(timer);
-  }, [journey, journeyDone]);
+  }, [reacting]);
 
   // A golden spark's timer stops while a menu is open or the game is paused.
   const frozenSince = useRef<number | null>(null);
   useEffect(() => {
     if (menu || paused) { frozenSince.current ??= Date.now(); return; }
     if (frozenSince.current === null) return;
-    const frozenFor = Date.now() - frozenSince.current;
+    const since = frozenSince.current, resumed = Date.now();
     frozenSince.current = null;
-    setPickups(current => current.map(p => p.kind === "golden" && p.expiresAt ? { ...p, expiresAt: p.expiresAt + frozenFor } : p));
+    // A spark that appeared mid-freeze is only extended by the time since it appeared.
+    setPickups(current => current.map(p => p.kind === "golden" && p.expiresAt ? { ...p, expiresAt: p.expiresAt + resumed - Math.max(since, p.expiresAt - GOLDEN_MS) } : p));
   }, [menu, paused]);
 
   // A missed golden spark scatters into three sparks worth exactly the same; nothing is lost.
@@ -186,7 +199,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       [...scene.stations, ...pickups.filter(p => p.id !== expired.id).map(p => p.at)]);
     const values = splitValue(expired.value, Math.max(1, spots.length));
     setPickups(current => [...current.filter(p => p.id !== expired.id),
-      ...(spots.length ? spots : [expired.at]).map((at, i) => ({ id: `${expired.id}-${i}`, at, value: values[i], kind: "spark" as const, taken: false }))]);
+      ...(spots.length ? spots : [expired.at]).map((at, i) => ({ id: `${expired.id}-${i}`, at, value: values[i], kind: "spark" as const, born: expired.born, taken: false }))]);
     setMessage("The golden spark scattered. Its value is still on the ground.");
   }, [now, pickups, scene, menu, paused]);
 
@@ -202,24 +215,25 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       const canvas = worldRef.current?.querySelector("canvas");
       const x = Number(canvas?.dataset.x), y = Number(canvas?.dataset.y);
       if (!paused && !menu && Number.isFinite(x) && Number.isFinite(y)) {
-        let moved = false, collected: Pickup | null = null;
+        let moved = false;
+        const collected: Pickup[] = [];
         const next = pickups.map(p => {
           if (p.taken) return p;
           const step = pullStep(p.at, [x, y], reach, PULL_SPEED * seconds);
           if (step === null) return p;
           moved = true;
-          if (step === "collected") { collected ??= p; return { ...p, taken: true }; }
+          if (step === "collected") { collected.push(p); return { ...p, taken: true }; }
           return { ...p, at: step };
         });
         if (moved) {
           setPickups(next);
-          if (collected) {
-            const kind = (collected as Pickup).kind, value = (collected as Pickup).value;
-            setSession(current => ({ ...current, gathered: current.gathered + 1, gatheredRf: current.gatheredRf + value }));
-            setJourney(current => kind === "pouch" ? { ...current, pouchGathered: current.pouchGathered + 1 }
-              : journeyStep(current) === 3 ? { ...current, sparksAfterHome: current.sparksAfterHome + 1 } : current);
+          if (collected.length) {
+            const value = collected.reduce((sum, p) => sum + p.value, 0n), left = next.filter(p => !p.taken).length;
+            setSession(current => ({ ...current, gathered: current.gathered + collected.length, gatheredRf: current.gatheredRf + value }));
+            setJourney(current => advanceJourney(current, { type: "collect", born: collected.map(p => p.born), left }));
+            const kind = collected.some(p => p.kind === "golden") ? "golden" : collected.some(p => p.kind === "spark") ? "spark" : "pouch";
+            sound.current?.play(({ golden: "reveal-legendary", spark: "reveal-rare", pouch: "select" } as const)[kind]);
           }
-          if (collected) sound.current?.play({ golden: "reveal-legendary", spark: "reveal-rare", pouch: "select" }[(collected as Pickup).kind] as FriendSoundCue);
           return;
         }
       }
@@ -259,12 +273,14 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const remaining = pickups.filter(p => !p.taken).length;
 
   const broughtHome = trips.reduce((sum, t) => sum + t.carried, 0n);
+  const target = gatherTarget(journey, remaining);
+  const freshOnGround = pickups.some(p => !p.taken && p.born > journey.homeBlock);
 
   function bringHome() {
     if (carrying.length === 0 || paused || !atDen) return;
     setTrips(current => [...current, { number: current.length + 1, carried, pickups: carrying.length }]);
     setHomeSinceClaim(home => home + carried);
-    setJourney(current => ({ ...current, tripsHome: current.tripsHome + 1 }));
+    if (state) setJourney(current => advanceJourney(current, { type: "home", block: state.block, left: remaining }));
     if (!reducedMotion && friendAt) setPour({ from: friendAt, count: Math.min(carrying.length, TRAIL_MAX), landed: false });
     setPickups(current => current.filter(p => !p.taken));
     sound.current?.play("reward");
@@ -298,6 +314,14 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const feedback = <p role={error ? "alert" : "status"}>{error || message || (busy ? "Waiting for preview confirmation…" : "Treats are simulated RF. Chain readings are live and read-only.")}</p>;
   const reactivation = state ? reactivationCost(state.generation) : null;
   const nextCheck = state ? Math.max(0, Math.ceil((state.readAt + POLL_MS - now) / 1000)) : 0;
+  const objective = {
+    gather: target === 0 ? `Waiting for new earnings to gather · next check ${nextCheck}s` : `Gather ${target} of what it earned (${Math.min(journey.gathered, target)}/${target})`,
+    home: "Bring them home to the Den",
+    spark: freshOnGround ? "Catch one fresh spark of new earnings"
+      : holdSince !== null ? "Catch one fresh spark · new earnings are being held for a golden spark"
+      : `Catch one fresh spark · waiting for new earnings, next check ${nextCheck}s`,
+    done: "",
+  }[journey.stage];
 
   return <section className="forage" aria-label="Forage" aria-busy={busy}>
     <div className="forage-world" ref={worldRef} inert={Boolean(menu) || paused || undefined}>
@@ -332,13 +356,13 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       <div className="forage-actions">
         <button type="button" onClick={() => navigate("den")}>Den</button>
         <button type="button" onClick={() => navigate("proof")}>Proof</button>
+        {receipt && <button type="button" onClick={() => navigate("receipt")}>Receipt</button>}
         <button type="button" onClick={() => navigate("settings")}>Settings</button>
       </div>
       {!menu && message && <p className="forage-toast" role="status">{message}</p>}
-      {!journeyDone && state && <p className="forage-journey">{!active
+      {journey.stage !== "done" && state && <p className="forage-journey">{!active
         ? "First Forage waits: your Friend is resting, out of the reward pool, so nothing new can be gathered."
-        : `First Forage · ${["", `Gather ${Math.min(FIRST_FORAGE_GATHER, journey.pouchTotal)} of what it earned (${Math.min(journey.pouchGathered, FIRST_FORAGE_GATHER)}/${Math.min(FIRST_FORAGE_GATHER, journey.pouchTotal)})`,
-          carrying.length ? "Bring them home to the Den" : "Gather again, then bring it home to the Den", "Catch one fresh spark of new earnings"][journeyStep(journey)]}`}</p>}
+        : `First Forage · ${objective}`}</p>}
       {reacting && friendAt && <div className="forage-bubble" style={screen(friendAt, 0, -120)}>{reactionFor(traits?.character ?? "")}</div>}
       <p className="forage-hint">WASD / arrows or tap to walk · walk into glowing pickups · E at the Den, Treat stand or Proof board</p>
     </div>
@@ -352,7 +376,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         {state && !vitals?.awake && <p className="forage-rest">This Friend is resting: its activation is cleared, so it isn't earning and can't gather. Reactivating a generation {state.generation} Friend costs {reactivation ?? "?"} RF on rarefriends.com. It stays fully playable here.</p>}
         <h3>Memory wall</h3>
         <p className="forage-small">Read from this Friend's own on-chain events. It follows the NFT to every device and every owner.</p>
-        {historyError ? <p role="alert">History unavailable: {historyError}</p> : !history ? <p>Reading history…</p> :
+        {historyError ? <p role="alert">History unavailable: {historyError} <button type="button" onClick={() => setHistoryError("")}>Retry history</button></p> : !history ? <p>Reading history…</p> :
           <ol className="forage-wall">{history.truncated && <li className="forage-trip"><strong>Earlier owners</strong><span>Not shown: the wall walks back through the latest four ownership moves.</span></li>}
             {history.milestones.map(m => <li key={`${m.tx}-${m.logIndex}-${m.kind}`}>
             <strong>{m.title}</strong><span>{when(history.times.get(m.block))} · block {m.block.toLocaleString("en-US")}</span>
@@ -377,8 +401,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <button type="button" disabled={busy || paused} onClick={() => navigate(null)}>Keep it</button>
         <button type="button" disabled={busy || paused} onClick={() => void act(() => client.redeem(result!.outcomeId!, 1n), "reward", () => setMenu("treats"))}>Redeem · {formatGameRf(outcome.reward)}</button>
       </div> : menu === "proof" ? <>
-        <p className="forage-small">The values down to Pouch are one read-only snapshot of Robinhood Chain (4663) at the block shown, refreshed every 15 s. World is read once when the session starts. Nothing is signed or stored. Between reads the HUD pouch is an estimate at the measured rate; after a failed read it shows the last read value.</p>
-        {chainError && <p role="alert">Last read failed: {chainError}. <button type="button" onClick={() => setRetry(r => r + 1)}>Retry</button></p>}
+        <p className="forage-small">The values down to Pouch are one read-only snapshot of Robinhood Chain (4663) at the block shown, refreshed every 15 s; reward share is worked out from weight and totalWeight. World is read once when the session starts. Nothing is signed or stored. Between reads the HUD pouch is an estimate at the measured rate; after a failed read it shows the last read value.</p>
+        {chainError && <p role="alert">Last read failed: {chainError}. <button type="button" onClick={() => readNow.current?.()}>Read again</button></p>}
         {state && <dl className="forage-proof">
           <dt>Block</dt><dd>{state.block.toLocaleString("en-US")}</dd>
           <dt>Owner</dt><dd>{short(state.owner)} · Generations.ownerOf</dd>
@@ -390,18 +414,22 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           <dt>World</dt><dd>{traits?.scenery || "unknown"}{scene.matched ? "" : " (fallback world)"} · Generations.tokenURI, read at session start</dd>
         </dl>}
         <p className="forage-small">Contracts: Generations {short(CONTRACTS.generations)} · ActivationManager {short(CONTRACTS.activationManager)} · RF {short(CONTRACTS.rf)}. Verify on {EXPLORER.replace("https://", "")}.</p>
-      </> : menu === "receipt" ? <>
+      </> : menu === "receipt" && receipt ? <>
         <p><strong>First Forage complete.</strong> {reactionFor(traits?.character ?? "")}</p>
+        <h3>From the chain</h3>
         <dl className="forage-proof">
           <dt>Friend</dt><dd>#{friendId.toString()} · {traits?.character || "Friend"} · {traits?.scenery || scene.name}</dd>
-          <dt>Blocks read</dt><dd>{session.startBlock?.toLocaleString("en-US")} → {state?.block.toLocaleString("en-US")}</dd>
-          <dt>Unclaimed at start</dt><dd>{formatRf(session.startEarned)} RF</dd>
-          <dt>New earnings seen</dt><dd>{formatRf(session.newSeen, 6)} RF, as real increases between reads</dd>
-          <dt>Gathered</dt><dd>{session.gathered} pickups · {formatRf(session.gatheredRf)} RF</dd>
-          <dt>Brought home</dt><dd>{trips.length} {trips.length === 1 ? "trip" : "trips"} · {formatRf(broughtHome)} RF</dd>
-          <dt>Claims · resting</dt><dd>{session.claims} claims seen · {session.restingSeen ? "rested this session" : "in the pool all session"}</dd>
+          <dt>Blocks read</dt><dd>{receipt.startBlock?.toLocaleString("en-US")} → {receipt.endBlock.toLocaleString("en-US")}</dd>
+          <dt>Unclaimed at start</dt><dd>{formatRf(receipt.startEarned)} RF</dd>
+          <dt>New earnings seen</dt><dd>{formatRf(receipt.newSeen, 6)} RF, the sum of increases between reads</dd>
+          <dt>Claims · resting</dt><dd>{receipt.claims} {receipt.claims === 1 ? "drop" : "drops"} in unclaimed RF, read as claims · {receipt.restingSeen ? "resting at a read" : "no resting seen at reads"}</dd>
         </dl>
-        <p className="forage-small">Every number here came from read-only chain reads of this Friend. Pickups and trips are a picture of its real rewards; nothing was moved, signed or stored.</p>
+        <h3>This session's play</h3>
+        <dl className="forage-proof">
+          <dt>Gathered</dt><dd>{receipt.gathered} pickups · {formatRf(receipt.gatheredRf)} RF</dd>
+          <dt>Brought home</dt><dd>{receipt.trips} {receipt.trips === 1 ? "trip" : "trips"} · {formatRf(receipt.broughtHome)} RF</dd>
+        </dl>
+        <p className="forage-small">Chain rows are read-only reads of this Friend, frozen when First Forage finished. Play rows count what you did here; pickups are a picture of its real rewards, and nothing was moved, signed or stored.</p>
       </> : menu === "settings" ? <>
         <button type="button" aria-pressed={!muted} onClick={() => { const next = !muted; setMuted(next); sound.current?.setMuted(next); if (!next) void sound.current?.unlock(); }}>{muted ? "Sound off" : "Sound on"}</button>
         <label><input type="checkbox" checked={reducedMotion} onChange={event => setReducedMotion(event.target.checked)} /> Reduce motion</label>

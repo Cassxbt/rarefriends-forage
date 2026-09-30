@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionResult, padHex, parseAbi, toHex, zeroAddress } from "viem";
 import { buildGame, createGameServer } from "../node_modules/@rarefriends/friendsdk/scripts/dev-game.mjs";
 import { createArtworkFixture, installFixture, OWNER } from "../node_modules/@rarefriends/friendsdk/scripts/browser-fixture.mjs";
+import { formatRf } from "../game/vitals.ts";
 
 const GEN = "0x14c49e6118f46525de9ab41a51cbaa3c6ebf181d";
 const AM = "0xd4a35e11318e3679168d409184b788bcf9f283ac";
@@ -16,6 +17,7 @@ const PREVIOUS_OWNER = "0x5555555555555555555555555555555555555555";
 const FRIEND = 7730n;
 const RF = 10n ** 18n;
 const START = 63_102_473n;
+const PER_BLOCK = 20_000_000_000_000n;
 const abi = parseAbi([
   "function tokenURI(uint256) view returns (string)",
   "function positions(address, uint256) view returns (uint256 tier, uint256 weight)",
@@ -31,8 +33,9 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function createChain({ resting = false, ownerCycle = false } = {}) {
   // Until the game makes its first read, the SDK's own fixture answers (identity and discovery).
-  const chain = { started: false, block: START, claimed: false, fail: false, slowNext: false, resting };
-  const earned = () => chain.claimed ? 0n : 7n * RF + (chain.block - START) * 20_000_000_000_000n;
+  // After a claim the pouch stays empty, or regrows from the claim block when `regrow` is set.
+  const chain = { started: false, block: START, claimed: false, claimBlock: 0n, regrow: 0n, fail: false, slowNext: false, resting };
+  const earned = () => chain.claimed ? (chain.block - chain.claimBlock) * chain.regrow : 7n * RF + (chain.block - START) * PER_BLOCK;
   const log = (address, topics, data, block, tx) => ({ address, topics, data, blockNumber: toHex(block), blockHash: padHex("0x10", { size: 32 }),
     logIndex: "0x0", transactionHash: padHex(tx, { size: 32 }), transactionIndex: "0x0", removed: false });
   const transfer = (from, to, block, tx) => log(GEN, encodeEventTopics({ abi, eventName: "Transfer", args: { from, to, tokenId: FRIEND } }), "0x", block, tx);
@@ -142,6 +145,7 @@ test("an earning Friend gathers in its own world and only real events change the
   await game.getByText(/rewards were claimed/).waitFor();
   assert.equal(await pickups(), 0, "a claim clears the ground");
   await game.getByText(/^Carrying 0 /).waitFor({ timeout: 5_000 });
+  await game.getByText(/First Forage · Waiting for new earnings to gather · next check \d+s/).waitFor();
   assert.deepEqual(errors, []);
   assert.deepEqual(fixture.errors, []);
 });
@@ -187,6 +191,22 @@ async function visit(page, game, label) {
     if (await prompt.getByText("E / tap to interact").waitFor({ timeout: 6_000 }).then(() => true, () => false)) { await prompt.click(); return; }
   }
   throw new Error(`Could not reach ${label}`);
+}
+
+const ON_GROUND = ".forage-pickup:not(.forage-trail):not(.forage-pour)";
+const ids = locator => locator.evaluateAll(nodes => nodes.map(n => n.dataset.id));
+
+/** After a trip home, waits for a spark that wasn't on the ground before it and catches it. */
+async function catchFreshSpark(page, game, before) {
+  for (let i = 0; i < 90; i++) {
+    const id = (await ids(game.locator(`${ON_GROUND}:is(.forage-spark, .forage-golden)`))).find(id => !before.has(id));
+    if (id) {
+      const box = await game.locator(`[data-id="${id}"]`).boundingBox();
+      if (box) return page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
+    }
+    await sleep(1_000);
+  }
+  throw new Error("No spark of new earnings appeared after the trip");
 }
 
 test("a Friend that stops earning can't gather, and gathers again once active", { timeout: 180_000 }, async () => {
@@ -259,15 +279,49 @@ test("First Forage: gather three, bring them home, catch a fresh spark, get a re
   await game.getByText("First Forage · Bring them home to the Den").waitFor();
   await visit(page, game, "Den");
   await game.getByRole("button", { name: /^Bring [3-9] home/ }).click();
+  const beforeHome = new Set(await ids(game.locator(ON_GROUND)));
   await game.getByRole("button", { name: "Close Den" }).click();
   await game.getByText(/First Forage · Catch one fresh spark/).waitFor();
-  const spark = game.locator(".forage-pickup.forage-spark:not(.forage-trail):not(.forage-pour)").first();
-  await spark.waitFor({ timeout: 40_000 });
-  const box = await spark.boundingBox();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
+  await catchFreshSpark(page, game, beforeHome);
   await game.getByText("First Forage complete.").waitFor({ timeout: 30_000 });
   await game.getByText("The Mask gives nothing away, but it is clearly pleased.").first().waitFor();
-  await game.getByText(/New earnings seen/).waitFor();
+  const [from, to] = (await game.locator("dt:text-is('Blocks read') + dd").innerText()).split(" → ").map(b => BigInt(b.replaceAll(",", "")));
+  assert.equal(await game.locator("dt:text-is('New earnings seen') + dd").innerText(), `${formatRf((to - from) * PER_BLOCK, 6)} RF, the sum of increases between reads`,
+    "every increase read counts, including earnings held back for a golden spark");
+  assert.deepEqual(errors, []);
+  assert.deepEqual(fixture.errors, []);
+});
+
+test("a claim mid-journey restarts gathering from what it earns next; the journey still finishes and its receipt reopens", { timeout: 300_000 }, async () => {
+  const chain = createChain();
+  const { page, game, errors, fixture } = await open(chain);
+  const tap = async locator => { const box = await locator.boundingBox(); await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16); };
+  await game.getByText(/First Forage · Gather 3 of what it earned \(0\/3\)/).waitFor();
+  await tap(game.locator(ON_GROUND).first());
+  await game.getByText(/^Carrying 1 /).waitFor({ timeout: 20_000 });
+
+  // The read that shows the claim already shows new earnings, so the ground is laid out again at once.
+  Object.assign(chain, { claimBlock: chain.block, regrow: 1_000_000_000_000_000n, claimed: true });
+  await game.getByText(/rewards were claimed/).waitFor();
+  // The regrown pickup may land where the Friend stands and be pulled in at once; either way it is gathered from scratch.
+  await game.getByText(/First Forage · (Gather 1 of what it earned \(0\/1\)|Bring them home to the Den)/).waitFor({ timeout: 40_000 });
+  if (await game.locator(ON_GROUND).count()) await tap(game.locator(ON_GROUND).first());
+  await game.getByText("First Forage · Bring them home to the Den").waitFor({ timeout: 20_000 });
+  await game.getByText(/^Carrying 1 · 0\.15 RF/).waitFor();
+
+  await visit(page, game, "Den");
+  await game.getByRole("button", { name: /^Bring \d+ home/ }).click();
+  const beforeHome = new Set(await ids(game.locator(ON_GROUND)));
+  await game.getByRole("button", { name: "Close Den" }).click();
+  await game.getByText(/First Forage · Catch one fresh spark/).waitFor();
+  await catchFreshSpark(page, game, beforeHome);
+  await game.getByText("First Forage complete.").waitFor({ timeout: 30_000 });
+  await game.getByText(/1 drop in unclaimed RF, read as claims/).waitFor();
+  await game.getByRole("button", { name: /^Close/ }).click();
+  await sleep(7_000);
+  assert.equal(await game.locator(".forage-bubble").count(), 0, "the reaction clears after a few seconds");
+  await game.locator(".forage-actions").getByRole("button", { name: "Receipt" }).click();
+  await game.getByText("First Forage complete.").waitFor();
   assert.deepEqual(errors, []);
   assert.deepEqual(fixture.errors, []);
 });
