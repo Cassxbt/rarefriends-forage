@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, sparkStep, toMilestones, BASE_REACH, MAX_PULL,
+  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, BASE_REACH, MAX_PULL,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -57,18 +57,28 @@ test("projected pouch never goes backwards between reads", () => {
   assert.equal(projectEarned(friend, 100n, friend.readAt + 3_000), friend.earnedRf + 300n);
 });
 
-test("a spark carries exactly what was earned since the last one", () => {
-  assert.deepEqual(sparkStep(RF, RF + 3n, 0), { kind: "spark", value: 3n });
-  assert.deepEqual(sparkStep(RF, RF, 0), { kind: "none" });
+// reconcile(earned, represented, laidOut, active, sparksOnGround): represented = ground + carried + brought home since the last claim.
+test("an active Friend's waiting rewards are laid out once, in full", () => {
+  assert.deepEqual(reconcile(7n * RF, 0n, false, true, 0), { kind: "layout", value: 7n * RF });
 });
 
-test("a full ground holds earnings back for the next spark", () => {
-  assert.deepEqual(sparkStep(RF, RF * 2n, MAX_SPARKS_ON_GROUND), { kind: "none" });
-  assert.deepEqual(sparkStep(RF, RF * 2n, MAX_SPARKS_ON_GROUND - 1), { kind: "spark", value: RF });
+test("after the layout, only a real increase becomes a spark, worth exactly that increase", () => {
+  assert.deepEqual(reconcile(7n * RF + 3n, 7n * RF, true, true, 0), { kind: "spark", value: 3n });
+  assert.deepEqual(reconcile(7n * RF, 7n * RF, true, true, 0), { kind: "none" });
 });
 
-test("falling earnings read as a claim", () => {
-  assert.deepEqual(sparkStep(RF, RF / 2n, 0), { kind: "claimed" });
+test("a full ground holds new earnings back for the next spark", () => {
+  assert.deepEqual(reconcile(8n * RF, 7n * RF, true, true, MAX_SPARKS_ON_GROUND), { kind: "none" });
+});
+
+test("rewards below what the game represents mean a claim, even with pickups carried", () => {
+  assert.deepEqual(reconcile(0n, RF / 2n, true, true, 0), { kind: "claimed" });
+  assert.deepEqual(reconcile(0n, RF / 2n, true, false, 0), { kind: "claimed" });
+});
+
+test("a resting Friend gets nothing laid out, and its waiting rewards appear once it is active again", () => {
+  assert.deepEqual(reconcile(7n * RF, 0n, false, false, 0), { kind: "none" });
+  assert.deepEqual(reconcile(7n * RF, 0n, false, true, 0), { kind: "layout", value: 7n * RF });
 });
 
 test("pouch splits into bounded pickups that add back up", () => {

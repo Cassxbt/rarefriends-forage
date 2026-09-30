@@ -75,16 +75,19 @@ export function projectEarned(latest: FriendState, ratePerSecond: bigint, now: n
   return latest.earnedRf + ratePerSecond * elapsed;
 }
 
-export type SparkStep = Readonly<{ kind: "claimed" } | { kind: "spark"; value: bigint } | { kind: "none" }>;
+export type Reconciled = Readonly<{ kind: "claimed" } | { kind: "layout"; value: bigint } | { kind: "spark"; value: bigint } | { kind: "none" }>;
 
 /**
- * A spark holds everything earned since the last one, so slow earners still see sparks and nothing is invented.
- * Earnings falling means they were claimed; while the ground is full, new earnings roll into the next spark.
+ * One rule keeps the game honest: `represented` (ground + carried + brought home since the last claim) may never
+ * exceed the Friend's real unclaimed rewards. Less than represented means a claim; more means new ground, laid out
+ * in full the first time the Friend is active, then as one spark per real increase.
  */
-export function sparkStep(base: bigint, current: bigint, onGround: number): SparkStep {
-  if (current < base) return { kind: "claimed" };
-  if (current === base || onGround >= MAX_SPARKS_ON_GROUND) return { kind: "none" };
-  return { kind: "spark", value: current - base };
+export function reconcile(earned: bigint, represented: bigint, laidOut: boolean, active: boolean, sparksOnGround: number): Reconciled {
+  if (earned < represented) return { kind: "claimed" };
+  if (!active || earned === represented) return { kind: "none" };
+  if (!laidOut) return { kind: "layout", value: earned - represented };
+  if (sparksOnGround >= MAX_SPARKS_ON_GROUND) return { kind: "none" };
+  return { kind: "spark", value: earned - represented };
 }
 
 /** Pull radius from kept treats: more held, farther the Friend draws pickups in. */

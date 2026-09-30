@@ -35,3 +35,4 @@
 .forage-golden b { display: block; transform: rotate(-45deg); font-size: 10px; line-height: 22px; text-align: center; color: #111; }
 .forage-trail { opacity: 0.85; transform: rotate(45deg) scale(0.7); }
 .forage-pour { transition: left 600ms ease-in, top 600ms ease-in, opacity 600ms ease-in; }
+.forage-waiting { opacity: 0.35; filter: grayscale(1); }
