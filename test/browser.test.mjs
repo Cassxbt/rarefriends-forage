@@ -197,17 +197,22 @@ async function visit(page, game, label) {
 const ON_GROUND = ".forage-pickup:not(.forage-trail):not(.forage-pour)";
 const ids = locator => locator.evaluateAll(nodes => nodes.map(n => n.dataset.id));
 
-/** After a trip home, waits for a spark that wasn't on the ground before it and catches it. */
+/**
+ * After a trip home, keeps walking to sparks that weren't on the ground before it until First Forage completes.
+ * A slow walk can miss a golden spark's 12 seconds; its three fragments are fresh too, so the next pass catches one.
+ */
 async function catchFreshSpark(page, game, before) {
+  const done = game.getByText("First Forage complete.");
   for (let i = 0; i < 90; i++) {
+    if (await done.isVisible()) return;
     const id = (await ids(game.locator(`${ON_GROUND}:is(.forage-spark, .forage-golden)`))).find(id => !before.has(id));
-    if (id) {
-      const box = await game.locator(`[data-id="${id}"]`).boundingBox();
-      if (box) return page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
-    }
-    await sleep(1_000);
+    const box = id && await game.locator(`[data-id="${id}"]`).boundingBox();
+    if (box) {
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
+      if (await done.waitFor({ timeout: 10_000 }).then(() => true, () => false)) return;
+    } else await sleep(1_000);
   }
-  throw new Error("No spark of new earnings appeared after the trip");
+  throw new Error("No spark of new earnings was caught after the trip");
 }
 
 test("a Friend that stops earning can't gather, and gathers again once active", { timeout: 180_000 }, async () => {
