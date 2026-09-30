@@ -16,7 +16,7 @@
 .forage-warn { color: #b00020; }
 .forage-actions { position: absolute; right: 12px; bottom: 64px; display: flex; gap: 8px; }
 .forage-actions button, .forage-item button { font: inherit; padding: 6px 10px; background: #f4f4f0; border: 2px solid #111; cursor: pointer; }
-.forage-hint { position: absolute; left: 0; right: 0; bottom: 104px; pointer-events: none; margin: 0; text-align: center; color: #333; }
+.forage-hint { position: absolute; left: 0; right: 0; bottom: 110px; pointer-events: none; margin: 0; text-align: center; color: #333; }
 .forage-loading { display: grid; place-content: center; gap: 12px; height: 100%; text-align: center; }
 .forage-wall { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .forage-wall li { display: grid; gap: 2px; padding: 8px; border-left: 4px solid #cf0; background: #f4f4f0; }
@@ -36,3 +36,5 @@
 .forage-trail { opacity: 0.85; transform: rotate(45deg) scale(0.7); }
 .forage-pour { transition: left 600ms ease-in, top 600ms ease-in, opacity 600ms ease-in; }
 .forage-waiting { opacity: 0.35; filter: grayscale(1); }
+.forage-journey { position: absolute; left: 12px; bottom: 64px; max-width: 60%; margin: 0; padding: 6px 10px; background: #cf0; border: 2px solid #111; font-weight: 700; }
+.forage-bubble { position: absolute; transform: translate(-50%, -100%); max-width: 240px; padding: 6px 10px; background: #fff; border: 2px solid #111; text-align: center; font-size: 12px; pointer-events: none; }

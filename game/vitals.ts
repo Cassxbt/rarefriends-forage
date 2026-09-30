@@ -105,6 +105,37 @@ export function pullStep(at: WorldPoint, friend: WorldPoint, radius: number, spe
   return [at[0] + (dx / distance) * step, at[1] + (dy / distance) * step];
 }
 
+export type Journey = Readonly<{ pouchTotal: number; pouchGathered: number; tripsHome: number; sparksAfterHome: number }>;
+export const FIRST_FORAGE_GATHER = 3;
+
+/**
+ * First Forage: gather some of what the Friend earned, bring it home, then catch one fresh spark of new earnings.
+ * A Friend with nothing waiting (just claimed) starts at the spark step. Returns the current step, 4 when done.
+ */
+export function journeyStep(j: Journey): 1 | 2 | 3 | 4 {
+  const need = Math.min(FIRST_FORAGE_GATHER, j.pouchTotal);
+  if (j.pouchGathered < need) return 1;
+  if (need > 0 && j.tripsHome < 1) return 2;
+  return j.sparksAfterHome < 1 ? 3 : 4;
+}
+
+const REACTIONS: Record<string, string> = {
+  Skeleton: "Its bones rattle happily. Every crumb is counted.",
+  Mask: "The Mask gives nothing away, but it is clearly pleased.",
+  Family: "The whole family cheers the haul.",
+  Cellular: "It splits into a grin.",
+  Asymmetry: "A lopsided victory dance.",
+  Hoverer: "It floats a little higher than before.",
+  Colossus: "The ground shakes, gently.",
+  Sparkling: "It sparkles brighter than the sparks.",
+  Hollow: "The hollow fills with a quiet glow.",
+};
+
+/** A one-line reaction in the voice of the Friend's character family. */
+export function reactionFor(character: string): string {
+  return REACTIONS[character] ?? "It looks proud of what it earned.";
+}
+
 /** Splits a value into parts that add back up exactly; the last part takes the remainder. */
 export function splitValue(value: bigint, parts: number): bigint[] {
   const each = value / BigInt(parts);

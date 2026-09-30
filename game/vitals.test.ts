@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, walkTransfers, BASE_REACH, MAX_PULL,
+  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, walkTransfers, journeyStep, reactionFor, BASE_REACH, MAX_PULL,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -161,4 +161,22 @@ test("history says when it stopped before the first owner", async () => {
   const { transfers, truncated } = await walkTransfers(async holder => logs.filter(l => l.to === holder), A as `0x${string}`, 4);
   assert.equal(transfers.length, 4);
   assert.equal(truncated, true);
+});
+
+test("First Forage: gather three, bring them home, then catch one fresh spark", () => {
+  const j = { pouchTotal: 12, pouchGathered: 0, tripsHome: 0, sparksAfterHome: 0 };
+  assert.equal(journeyStep(j), 1);
+  assert.equal(journeyStep({ ...j, pouchGathered: 3 }), 2);
+  assert.equal(journeyStep({ ...j, pouchGathered: 3, tripsHome: 1 }), 3);
+  assert.equal(journeyStep({ ...j, pouchGathered: 3, tripsHome: 1, sparksAfterHome: 1 }), 4);
+});
+
+test("First Forage with a small or empty pouch never asks for more than exists", () => {
+  assert.equal(journeyStep({ pouchTotal: 1, pouchGathered: 1, tripsHome: 0, sparksAfterHome: 0 }), 2);
+  assert.equal(journeyStep({ pouchTotal: 0, pouchGathered: 0, tripsHome: 0, sparksAfterHome: 0 }), 3, "just claimed: straight to the spark");
+});
+
+test("every character family has its own reaction", () => {
+  for (const family of ["Skeleton", "Mask", "Family", "Cellular", "Asymmetry", "Hoverer", "Colossus", "Sparkling", "Hollow"])
+    assert.notEqual(reactionFor(family), reactionFor(""));
 });
