@@ -14,7 +14,7 @@
 
 Most Friend games ask what your Friend can *do*. Forage shows what your Friend *is*: its world, its earnings and its history, read live from **Rare Friends on Robinhood Chain**. No reward is invented.
 
-**[ Play it ↗ ](https://cassxbt.github.io/rarefriends-forage/)** · **[ Judge it in 90 seconds ↓ ](#judge-it-in-90-seconds)** · **[ Proof on mainnet ↓ ](#proof-on-mainnet)** · **[ What's real ↓ ](#whats-real-and-whats-simulated)**
+**[ Play it ↗ ](https://rarefriends-forage.vercel.app)** · **[ Judge it in 90 seconds ↓ ](#judge-it-in-90-seconds)** · **[ Proof on mainnet ↓ ](#proof-on-mainnet)** · **[ What's real ↓ ](#whats-real-and-whats-simulated)**
 
 </div>
 
@@ -69,9 +69,11 @@ Every session opens with a short journey, shown in the objective bar:
 
 Finish it and your Friend reacts in its own family's voice (a Mask gives nothing away, a Colossus shakes the ground), and a **receipt** opens: the blocks read, unclaimed RF at the start, new earnings seen, what you gathered and brought home, and any claims or resting seen. A Friend with an empty pouch starts at step 3; a resting Friend is told why the journey can't run. Nothing is faked to complete it.
 
+<img src="assets/receipt.png" alt="First Forage receipt: blocks read, unclaimed RF at start, new earnings seen, gathered and brought home" width="720" />
+
 ## Judge it in 90 seconds
 
-1. **Open** [the preview](https://cassxbt.github.io/rarefriends-forage/), connect, pick your Friend. The top-left card names **its on-chain scenery**; the world matches it.
+1. **Open** [the preview](https://rarefriends-forage.vercel.app), connect, pick your Friend. The top-left card names **its on-chain scenery**; the world matches it.
 2. **Look at the pouch card.** That is your Friend's real unclaimed RF from the last chain read, estimated between 15-second reads. Compare it with "Claimable" on [rarefriends.com/portfolio](https://rarefriends.com/portfolio).
 3. **Follow First Forage** in the objective bar: walk into pickups (WASD, arrows or tap); they stack above your Friend's head.
 4. **Walk to the Den** and press E: bring them home, then read the **Memory wall**. Copy a tx hash into the explorer.
@@ -88,7 +90,7 @@ Friend **#93858** (Generation 3, Mask), used for the screenshots above and the l
 | World | Scenery **Rooftop** → Rooftop Hangout | `Generations.tokenURI(93858)` |
 | Appeared | block 67,765,091 · 2026-09-20 07:36 UTC | [tx 0x9044d0a5…](https://robinhoodchain.blockscout.com/tx/0x9044d0a5febc01d674325d31f15a7b9cbbd087734778a55ecc8c3304438cd860) |
 | Hardwired and earning | block 67,767,619 · weight 1,450 · paid 1,000 RF | [tx 0xf52fc13b…](https://robinhoodchain.blockscout.com/tx/0xf52fc13b2c2220841c5bce21ce3089f576d4684b14bf75ce4d07ec59fe660649) |
-| Unclaimed rewards | ~114 RF at the time of the screenshots, growing every second | `ActivationManager.earned(RF, Generations, 93858)` |
+| Unclaimed rewards | ~124 RF at the time of the screenshots, growing every second | `ActivationManager.earned(RF, Generations, 93858)` |
 
 Re-run it yourself:
 
