@@ -325,7 +325,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         </div>
         <div className="forage-card">
           <span>Carrying {carrying.length} · {formatRf(carried)} RF · pull {reach}{reach > BASE_REACH ? " (treats)" : ""}</span>
-          <span>{!state ? "Reading its pouch…" : !active ? (remaining ? `Resting: ${remaining} waiting, can't gather` : "Resting: nothing to gather") : remaining ? `${remaining} to gather` : vitals?.awake ? `Can't carry what it hasn't earned · next check ${nextCheck}s` : "Resting: nothing to gather"}</span>
+          <span>{!state ? "Reading its pouch…" : !active ? (remaining ? `Resting: ${remaining} waiting, can't gather` : "Resting: nothing to gather") : remaining ? `${remaining} to gather` : `Can't carry what it hasn't earned · next check ${nextCheck}s`}</span>
           <span>Brought home: {trips.length} {trips.length === 1 ? "trip" : "trips"} · {formatRf(broughtHome)} RF</span>
         </div>
       </div>
@@ -338,7 +338,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       {!journeyDone && state && <p className="forage-journey">{!active
         ? "First Forage waits: your Friend is resting, out of the reward pool, so nothing new can be gathered."
         : `First Forage · ${["", `Gather ${Math.min(FIRST_FORAGE_GATHER, journey.pouchTotal)} of what it earned (${Math.min(journey.pouchGathered, FIRST_FORAGE_GATHER)}/${Math.min(FIRST_FORAGE_GATHER, journey.pouchTotal)})`,
-          "Bring them home to the Den", "Catch one fresh spark: real new earnings, spotted every 15 s"][journeyStep(journey)]}`}</p>}
+          carrying.length ? "Bring them home to the Den" : "Gather again, then bring it home to the Den", "Catch one fresh spark: real new earnings, spotted every 15 s"][journeyStep(journey)]}`}</p>}
       {reacting && friendAt && <div className="forage-bubble" style={screen(friendAt, 0, -120)}>{reactionFor(traits?.character ?? "")}</div>}
       <p className="forage-hint">WASD / arrows or tap to walk · walk into glowing pickups · E at the Den, Treat stand or Proof board</p>
     </div>

@@ -180,3 +180,9 @@ test("every character family has its own reaction", () => {
   for (const family of ["Skeleton", "Mask", "Family", "Cellular", "Asymmetry", "Hoverer", "Colossus", "Sparkling", "Hollow"])
     assert.notEqual(reactionFor(family), reactionFor(""));
 });
+
+test("a later tier-0 activation reads as a reactivation, not a second hardwiring", () => {
+  const act = (tier: number, block: bigint) => ({ tokenId: 1n, tier, weight: 1n, paid: 1n, block, logIndex: 0, tx: `0x${block}` as `0x${string}` });
+  assert.deepEqual(toMilestones([], [act(0, 10n), act(1, 20n), act(0, 30n)]).map(m => m.title),
+    ["Hardwired and earning", "Upgraded to tier 1", "Reactivated and earning"]);
+});

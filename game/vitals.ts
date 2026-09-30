@@ -31,7 +31,7 @@ export type Vitals = Readonly<{ awake: boolean; level: number; shareBps: number;
 
 export type TransferLog = Readonly<{ from: Address; to: Address; tokenId: bigint; block: bigint; logIndex: number; tx: Hash }>;
 export type ActivationLog = Readonly<{ tokenId: bigint; tier: number; weight: bigint; paid: bigint; block: bigint; logIndex: number; tx: Hash }>;
-export type Milestone = Readonly<{ kind: "appeared" | "activated" | "upgraded" | "new-owner"; block: bigint; logIndex: number; tx: Hash; title: string; detail: string }>;
+export type Milestone = Readonly<{ kind: "appeared" | "activated" | "reactivated" | "upgraded" | "new-owner"; block: bigint; logIndex: number; tx: Hash; title: string; detail: string }>;
 
 const ZERO: Address = "0x0000000000000000000000000000000000000000";
 
@@ -217,10 +217,11 @@ export function toMilestones(transfers: readonly TransferLog[], activations: rea
   }
   const ordered = [...activations].sort(chainOrder);
   ordered.forEach((log, index) => {
-    const first = index === 0 || log.tier === 0;
+    // Only the first activation is the hardwiring; a later tier-0 activation is a reactivation after a transfer.
+    const kind = index === 0 ? "activated" : log.tier === 0 ? "reactivated" : "upgraded";
     events.push({
-      kind: first ? "activated" : "upgraded", block: log.block, logIndex: log.logIndex, tx: log.tx,
-      title: first ? "Hardwired and earning" : `Upgraded to tier ${log.tier}`,
+      kind, block: log.block, logIndex: log.logIndex, tx: log.tx,
+      title: { activated: "Hardwired and earning", reactivated: "Reactivated and earning", upgraded: `Upgraded to tier ${log.tier}` }[kind],
       detail: `Weight ${formatRf(log.weight, 2)} · paid ${formatRf(log.paid, 2)} RF (50% burned, 50% to rewards).`,
     });
   });

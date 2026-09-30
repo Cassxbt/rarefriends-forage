@@ -5,7 +5,7 @@
 &nbsp;
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-33%20unit%20·%208%20e2e%20passing-10b981)
+![Tests](https://img.shields.io/badge/tests-34%20unit%20·%208%20e2e%20passing-10b981)
 ![Chain](https://img.shields.io/badge/chain-Robinhood%20mainnet%20(4663)-111)
 ![SDK](https://img.shields.io/badge/FriendSDK-0.1.4-ccff00)
 ![Track](https://img.shields.io/badge/Vibeathon-Character%20Spotlight-f59e0b)
@@ -207,7 +207,7 @@ npm run dev             # http://127.0.0.1:4173
 
 | Command | Checks |
 |---|---|
-| `npm test` | 33 unit and world tests: the reconcile rule, sparks, claims, pull, history order, First Forage, and all six worlds |
+| `npm test` | 34 unit and world tests: the reconcile rule, sparks, claims, pull, history order, First Forage, and all six worlds |
 | `npm run test:browser` | 8 end-to-end runs of the real SDK runtime in headless Chromium with the chain mocked: claims, resting and waking transitions, a delayed read, an outage, ownership history, the golden spark, a Den trip, treat keep and redeem, and First Forage. First run `npx playwright install chromium` |
 | `npm run test:live` | #93858's real state, world and history on mainnet |
 | `npm run typecheck` · `npm run check` | TypeScript, and FriendSDK game validation |
