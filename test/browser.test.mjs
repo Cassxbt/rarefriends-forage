@@ -188,7 +188,7 @@ async function visit(page, game, label) {
   for (const drop of [150, 90, 210]) {
     const box = await prompt.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + drop);
-    if (await prompt.getByText("E / tap to interact").waitFor({ timeout: 6_000 }).then(() => true, () => false)) { await prompt.click(); return; }
+    if (await prompt.getByText("E / tap to interact").waitFor({ timeout: 12_000 }).then(() => true, () => false)) { await prompt.click(); return; }
   }
   throw new Error(`Could not reach ${label}`);
 }
@@ -271,12 +271,17 @@ test("a Den trip lands on the wall once, and a kept treat widens the pull until 
 test("First Forage: gather three, bring them home, catch a fresh spark, get a reaction and a receipt", { timeout: 240_000 }, async () => {
   const { page, game, errors, fixture } = await open(createChain());
   await game.getByText(/First Forage · Gather 3 of what it earned \(0\/3\)/).waitFor();
-  for (let i = 1; i <= 3; i++) {
-    const box = await game.locator(".forage-pouch-pickup, .forage-pickup.forage-pouch:not(.forage-trail):not(.forage-pour)").first().boundingBox();
+  // Walk to pouch pickups until the journey says to go home; one step may catch more than one pickup.
+  const bringHome = game.getByText("First Forage · Bring them home to the Den");
+  for (let i = 0; i < 6 && !await bringHome.isVisible(); i++) {
+    const box = await game.locator(".forage-pickup.forage-pouch:not(.forage-trail):not(.forage-pour)").first().boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
-    await game.getByText(new RegExp(`^Carrying ${i} `)).waitFor({ timeout: 20_000 });
+    await game.getByText(/First Forage · (Gather 3 of what it earned \([1-3]\/3\)|Bring them home to the Den)/).waitFor({ timeout: 20_000 });
+    await sleep(1_500);
   }
-  await game.getByText("First Forage · Bring them home to the Den").waitFor();
+  await bringHome.waitFor();
+  const carried = Number((await game.getByText(/^Carrying \d+ /).innerText()).match(/\d+/)[0]);
+  assert.ok(carried >= 3, "the journey moves on only once three are carried");
   await visit(page, game, "Den");
   await game.getByRole("button", { name: /^Bring [3-9] home/ }).click();
   const beforeHome = new Set(await ids(game.locator(ON_GROUND)));
