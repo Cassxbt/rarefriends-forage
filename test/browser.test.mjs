@@ -185,10 +185,11 @@ test("a golden spark holds back real earnings, then scatters into three sparks i
 /** Walks the Friend to a station by tapping the ground under its label, then opens it. */
 async function visit(page, game, label) {
   const prompt = game.locator(".rf-world-prompt", { hasText: label });
-  for (const drop of [150, 90, 210]) {
+  // A long walk on a slow machine can outlast one tap's wait, so keep walking before giving up.
+  for (const drop of [150, 90, 210, 150, 90]) {
     const box = await prompt.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + drop);
-    if (await prompt.getByText("E / tap to interact").waitFor({ timeout: 12_000 }).then(() => true, () => false)) { await prompt.click(); return; }
+    if (await prompt.getByText("E / tap to interact").waitFor({ timeout: 15_000 }).then(() => true, () => false)) { await prompt.click(); return; }
   }
   throw new Error(`Could not reach ${label}`);
 }
