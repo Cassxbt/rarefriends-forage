@@ -29,9 +29,9 @@ export type FriendState = Readonly<{
 
 export type Vitals = Readonly<{ awake: boolean; level: number; shareBps: number; pouchRf: bigint; pouchWeth: bigint }>;
 
-export type TransferLog = Readonly<{ from: Address; to: Address; tokenId: bigint; block: bigint; tx: Hash }>;
-export type ActivationLog = Readonly<{ tokenId: bigint; tier: number; weight: bigint; paid: bigint; block: bigint; tx: Hash }>;
-export type Milestone = Readonly<{ kind: "appeared" | "activated" | "upgraded" | "new-owner"; block: bigint; tx: Hash; title: string; detail: string }>;
+export type TransferLog = Readonly<{ from: Address; to: Address; tokenId: bigint; block: bigint; logIndex: number; tx: Hash }>;
+export type ActivationLog = Readonly<{ tokenId: bigint; tier: number; weight: bigint; paid: bigint; block: bigint; logIndex: number; tx: Hash }>;
+export type Milestone = Readonly<{ kind: "appeared" | "activated" | "upgraded" | "new-owner"; block: bigint; logIndex: number; tx: Hash; title: string; detail: string }>;
 
 const ZERO: Address = "0x0000000000000000000000000000000000000000";
 
@@ -154,29 +154,48 @@ export function formatRf(value: bigint, digits = 4): string {
   return `${negative ? "-" : ""}${whole.toLocaleString("en-US")}${fraction ? `.${fraction}` : ""}`;
 }
 
+/** Chain order: block, then position within the block. */
+export const chainOrder = (a: { block: bigint; logIndex: number }, b: { block: bigint; logIndex: number }) =>
+  a.block !== b.block ? (a.block < b.block ? -1 : 1) : a.logIndex - b.logIndex;
+
+/**
+ * Walks ownership backwards from the current owner: each step takes the latest transfer *to* the holder that is
+ * strictly earlier in chain order than the previous step, so transfers inside one block are kept.
+ */
+export async function walkTransfers(incomingTo: (holder: Address) => Promise<TransferLog[]>, owner: Address, maxHops: number) {
+  const transfers: TransferLog[] = [];
+  let holder: Address | null = owner, cursor: TransferLog | null = null;
+  for (let hop = 0; holder && hop < maxHops; hop++) {
+    const earlier = (await incomingTo(holder)).filter(log => !cursor || chainOrder(log, cursor) < 0).sort(chainOrder);
+    const latest = earlier.at(-1);
+    if (!latest) return { transfers, truncated: false };
+    transfers.push(latest);
+    cursor = latest;
+    holder = /^0x0+$/.test(latest.from) ? null : latest.from;
+  }
+  return { transfers, truncated: holder !== null };
+}
+
 /** Chronological milestones from a Friend's own Transfer and Activated events. */
 export function toMilestones(transfers: readonly TransferLog[], activations: readonly ActivationLog[]): Milestone[] {
   const events: Milestone[] = [];
   for (const log of transfers) {
     events.push(log.from.toLowerCase() === ZERO
-      ? { kind: "appeared", block: log.block, tx: log.tx, title: "Appeared", detail: "A temporary Friend appeared in its first owner's wallet." }
-      : { kind: "new-owner", block: log.block, tx: log.tx, title: "New home", detail: `Moved to ${short(log.to)}. A transfer clears activation.` });
+      ? { kind: "appeared", block: log.block, logIndex: log.logIndex, tx: log.tx, title: "Appeared", detail: "A temporary Friend appeared in its first owner's wallet." }
+      : { kind: "new-owner", block: log.block, logIndex: log.logIndex, tx: log.tx, title: "New home", detail: `Moved to ${short(log.to)}. A transfer clears activation.` });
   }
-  const ordered = [...activations].sort((a, b) => compareBlock(a.block, b.block));
+  const ordered = [...activations].sort(chainOrder);
   ordered.forEach((log, index) => {
     const first = index === 0 || log.tier === 0;
     events.push({
-      kind: first ? "activated" : "upgraded", block: log.block, tx: log.tx,
+      kind: first ? "activated" : "upgraded", block: log.block, logIndex: log.logIndex, tx: log.tx,
       title: first ? "Hardwired and earning" : `Upgraded to tier ${log.tier}`,
       detail: `Weight ${formatRf(log.weight, 2)} · paid ${formatRf(log.paid, 2)} RF (50% burned, 50% to rewards).`,
     });
   });
-  return events.sort((a, b) => compareBlock(a.block, b.block));
+  return events.sort(chainOrder);
 }
 
-function compareBlock(a: bigint, b: bigint) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
 
 export function short(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;

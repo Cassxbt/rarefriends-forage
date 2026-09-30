@@ -34,7 +34,7 @@ const CARRY_LIFT = -58, CARRY_STEP = 12;
 type Menu = "den" | "treats" | "proof" | "reward" | "settings" | null;
 type Pickup = { id: string; at: WorldPoint; value: bigint; kind: "pouch" | "spark" | "golden"; taken: boolean; expiresAt?: number };
 type Trip = { number: number; carried: bigint; pickups: number };
-type History = { milestones: Milestone[]; times: Map<bigint, number> };
+type History = { milestones: Milestone[]; times: Map<bigint, number>; truncated: boolean };
 
 const when = (time?: number) => time ? new Date(time).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "";
 
@@ -96,7 +96,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     if (!state || history || historyError) return;
     const version = epoch.current;
     readFriendHistory(friendId, state.owner)
-      .then(h => version === epoch.current && setHistory({ milestones: toMilestones(h.transfers, h.activations), times: h.times }))
+      .then(h => version === epoch.current && setHistory({ milestones: toMilestones(h.transfers, h.activations), times: h.times, truncated: h.truncated }))
       .catch(cause => version === epoch.current && setHistoryError(cause instanceof Error ? cause.message.split("\n")[0] : "History could not be read."));
   }, [state, history, historyError, friendId]);
 
@@ -316,7 +316,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <h3>Memory wall</h3>
         <p className="forage-small">Read from this Friend's own on-chain events. It follows the NFT to every device and every owner.</p>
         {historyError ? <p role="alert">History unavailable: {historyError}</p> : !history ? <p>Reading history…</p> :
-          <ol className="forage-wall">{history.milestones.map(m => <li key={`${m.tx}-${m.kind}`}>
+          <ol className="forage-wall">{history.truncated && <li className="forage-trip"><strong>Earlier owners</strong><span>Not shown: the wall walks back through the latest four ownership moves.</span></li>}
+            {history.milestones.map(m => <li key={`${m.tx}-${m.logIndex}-${m.kind}`}>
             <strong>{m.title}</strong><span>{when(history.times.get(m.block))} · block {m.block.toLocaleString("en-US")}</span>
             <span>{m.detail}</span><code className="forage-hash">{EXPLORER.replace("https://", "")}/tx/{m.tx}</code></li>)}
           </ol>}

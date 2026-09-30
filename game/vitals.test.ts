@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, BASE_REACH, MAX_PULL,
+  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, walkTransfers, BASE_REACH, MAX_PULL,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -103,8 +103,8 @@ test("spots are deterministic, spaced, and avoid stations", () => {
 
 test("milestones replay #93858's real history in block order", () => {
   const milestones = toMilestones(
-    [{ from: "0x0000000000000000000000000000000000000000", to: friend.owner, tokenId: 93858n, block: 67765091n, tx: APPEAR_TX }],
-    [{ tokenId: 93858n, tier: 0, weight: 1450n * RF, paid: 1000n * RF, block: 67767619n, tx: HARDWIRE_TX }],
+    [{ from: "0x0000000000000000000000000000000000000000", to: friend.owner, tokenId: 93858n, logIndex: 0, block: 67765091n, tx: APPEAR_TX }],
+    [{ tokenId: 93858n, tier: 0, weight: 1450n * RF, paid: 1000n * RF, logIndex: 1, block: 67767619n, tx: HARDWIRE_TX }],
   );
   assert.deepEqual(milestones.map(m => [m.kind, m.block]), [["appeared", 67765091n], ["activated", 67767619n]]);
   assert.match(milestones[1].detail, /paid 1,000 RF/);
@@ -112,9 +112,9 @@ test("milestones replay #93858's real history in block order", () => {
 
 test("later activations read as upgrades; transfers read as new homes", () => {
   const milestones = toMilestones(
-    [{ from: friend.owner, to: "0x1111111111111111111111111111111111111111", tokenId: 93858n, block: 70000000n, tx: APPEAR_TX }],
-    [{ tokenId: 93858n, tier: 0, weight: 1n, paid: 1n, block: 67767619n, tx: HARDWIRE_TX },
-      { tokenId: 93858n, tier: 1, weight: 2n, paid: 2n, block: 69000000n, tx: HARDWIRE_TX }],
+    [{ from: friend.owner, to: "0x1111111111111111111111111111111111111111", tokenId: 93858n, logIndex: 0, block: 70000000n, tx: APPEAR_TX }],
+    [{ tokenId: 93858n, tier: 0, weight: 1n, paid: 1n, logIndex: 1, block: 67767619n, tx: HARDWIRE_TX },
+      { tokenId: 93858n, tier: 1, weight: 2n, paid: 2n, logIndex: 1, block: 69000000n, tx: HARDWIRE_TX }],
   );
   assert.deepEqual(milestones.map(m => m.kind), ["activated", "upgraded", "new-owner"]);
 });
@@ -141,4 +141,24 @@ test("a missed golden spark scatters into parts worth exactly the same", () => {
   const parts = splitValue(10n * RF + 1n, 3);
   assert.equal(parts.length, 3);
   assert.equal(parts.reduce((a, b) => a + b, 0n), 10n * RF + 1n);
+});
+
+const A = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", B = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Z = "0x0000000000000000000000000000000000000000";
+const move = (from: string, to: string, block: bigint, logIndex: number) =>
+  ({ from: from as `0x${string}`, to: to as `0x${string}`, tokenId: 1n, block, logIndex, tx: `0x${block}${logIndex}` as `0x${string}` });
+
+test("history keeps every transfer inside one block, in log order", async () => {
+  // Minted to A, then A -> B and B -> A in one later block (the audit's reproduction).
+  const logs = [move(Z, A, 100n, 0), move(A, B, 200n, 3), move(B, A, 200n, 7)];
+  const { transfers, truncated } = await walkTransfers(async holder => logs.filter(l => l.to === holder), A as `0x${string}`, 4);
+  assert.deepEqual(transfers.map(t => [t.block, t.logIndex]), [[200n, 7], [200n, 3], [100n, 0]]);
+  assert.equal(truncated, false);
+  assert.deepEqual(toMilestones(transfers, []).map(m => m.kind), ["appeared", "new-owner", "new-owner"]);
+});
+
+test("history says when it stopped before the first owner", async () => {
+  const logs = [move(Z, A, 1n, 0), move(A, B, 2n, 0), move(B, A, 3n, 0), move(A, B, 4n, 0), move(B, A, 5n, 0)];
+  const { transfers, truncated } = await walkTransfers(async holder => logs.filter(l => l.to === holder), A as `0x${string}`, 4);
+  assert.equal(transfers.length, 4);
+  assert.equal(truncated, true);
 });
