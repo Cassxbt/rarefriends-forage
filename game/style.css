@@ -38,3 +38,9 @@
 .forage-waiting { opacity: 0.35; filter: grayscale(1); }
 .forage-journey { position: absolute; left: 12px; bottom: 64px; max-width: 60%; margin: 0; padding: 6px 10px; background: #cf0; border: 2px solid #111; font-weight: 700; }
 .forage-bubble { position: absolute; transform: translate(-50%, -100%); max-width: 240px; padding: 6px 10px; background: #fff; border: 2px solid #111; text-align: center; font-size: 12px; pointer-events: none; }
+.forage-keepsake { position: absolute; width: 18px; height: 22px; margin: -22px 0 0 -9px; background: #cf0; border: 2px solid #111; box-shadow: 0 0 0 2px #fff; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 75%, 0 100%); }
+.forage-pop { animation: forage-pop 600ms cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes forage-pop { from { scale: 0; } }
+.forage-kept { border-left-color: #111 !important; background: #f0ffc0 !important; }
+.forage-keepsakes { display: grid; gap: 6px; }
+.forage-keepsakes button[aria-pressed="true"] { background: #cf0; }

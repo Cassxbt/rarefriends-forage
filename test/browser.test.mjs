@@ -250,6 +250,11 @@ test("a Den trip lands on the wall once, and a kept treat widens the pull until 
   await game.getByRole("button", { name: /^Bring 1 home/ }).click();
   await game.getByText(/Brought home: 1 trip/).waitFor();
   await game.getByText("Trip 1 home", { exact: true }).waitFor();
+  await game.getByRole("button", { name: "Hardwired and earning · block 63,102,423" }).click();
+  await game.getByText('The Mask stands very still: "Hardwired and earning" (block 63,102,423) now hangs in the Den.').waitFor();
+  assert.equal(await game.locator(".forage-keepsake").count(), 1, "the keepsake hangs on the Den");
+  await game.locator(".forage-actions").getByRole("button", { name: "Den" }).click();
+  await game.getByText("Hardwired and earning · hung in the Den this session").waitFor();
   await game.getByRole("button", { name: "Close Den" }).click();
   await sleep(16_000);
   assert.ok(await pickups() < before + 4, "bringing it home doesn't lay the same rewards out again (only fresh sparks arrive)");
@@ -286,12 +291,14 @@ test("First Forage: gather three, bring them home, catch a fresh spark, get a re
   await visit(page, game, "Den");
   await game.getByRole("button", { name: /^Bring [3-9] home/ }).click();
   const beforeHome = new Set(await ids(game.locator(ON_GROUND)));
-  await game.getByRole("button", { name: "Close Den" }).click();
+  await game.getByRole("button", { name: "Appeared · block 63,102,383" }).click();
+  await game.locator(".forage-keepsake").waitFor();
   await game.getByText(/First Forage · Catch one fresh spark/).waitFor();
   await catchFreshSpark(page, game, beforeHome);
   await game.getByText("First Forage complete.").waitFor({ timeout: 30_000 });
   await game.getByText("The Mask gives nothing away, but it is clearly pleased.").first().waitFor();
   const [from, to] = (await game.locator("dt:text-is('Blocks read') + dd").innerText()).split(" → ").map(b => BigInt(b.replaceAll(",", "")));
+  assert.equal(await game.locator("dt:text-is('Keepsake') + dd").innerText(), "Appeared · block 63,102,383, hung in the Den");
   assert.equal(await game.locator("dt:text-is('New earnings seen') + dd").innerText(), `${formatRf((to - from) * PER_BLOCK, 6)} RF, the sum of increases between reads`,
     "every increase read counts, including earnings held back for a golden spark");
   assert.deepEqual(errors, []);

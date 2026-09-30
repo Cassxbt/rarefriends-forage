@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   RF, MAX_POUCH_PICKUPS, MAX_SPARKS_ON_GROUND, accrualRate, deriveVitals, formatRf, pickSpots, pouchPickups,
-  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, walkTransfers, advanceJourney, gatherTarget, JOURNEY_START, reactionFor, BASE_REACH, MAX_PULL,
+  projectEarned, pullRadius, pullStep, reactivationCost, splitValue, sceneryPreset, reconcile, toMilestones, walkTransfers, advanceJourney, gatherTarget, JOURNEY_START, reactionFor, homecomingLine, BASE_REACH, MAX_PULL,
   type FriendState, type WorldPoint,
 } from "./vitals.ts";
 
@@ -208,6 +208,15 @@ test("a claim restarts gathering, but never undoes a trip home or a finished jou
   assert.equal(advanceJourney(sparkStage, { type: "claim" }), sparkStage);
   const done = advanceJourney(sparkStage, collect([25n], 0));
   assert.equal(advanceJourney(done, { type: "claim" }), done);
+});
+
+test("a Homecoming names the real milestone and block, in each family's own voice", () => {
+  const families = ["Skeleton", "Mask", "Family", "Cellular", "Asymmetry", "Hoverer", "Colossus", "Sparkling", "Hollow"];
+  const milestone = { title: "Hardwired and earning", block: 67767619n };
+  const lines = families.map(family => homecomingLine(family, milestone));
+  for (const line of lines) assert.match(line, /"Hardwired and earning" \(block 67,767,619\) now hangs in the Den\.$/);
+  assert.equal(new Set(lines.map(line => line.split(":")[0])).size, families.length, "each family reacts differently");
+  assert.match(homecomingLine("", milestone), /now hangs in the Den/, "an unknown family still gets a line");
 });
 
 test("every character family has its own reaction", () => {

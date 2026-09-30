@@ -10,7 +10,7 @@ import { CONTRACTS, EXPLORER, readFriendHistory, readFriendState, readFriendTrai
 import { buildWorld, screen, viewPosition } from "./world.ts";
 import {
   accrualRate, deriveVitals, splitValue, pullRadius, pullStep, TREAT_PULL, BASE_REACH, formatRf, pickSpots, pouchPickups, projectEarned, reactivationCost,
-  short, reconcile, toMilestones, advanceJourney, gatherTarget, reactionFor, JOURNEY_START, type Journey,
+  short, reconcile, toMilestones, advanceJourney, gatherTarget, reactionFor, homecomingLine, JOURNEY_START, type Journey,
   type FriendState, type FriendTraits, type Milestone, type WorldPoint,
 } from "./vitals.ts";
 import "@rarefriends/friendsdk/frame.css";
@@ -40,6 +40,7 @@ type Session = { startBlock: bigint | null; startEarned: bigint; newSeen: bigint
 type Receipt = Session & { endBlock: bigint; trips: number; broughtHome: bigint };
 const NEW_SESSION: Session = { startBlock: null, startEarned: 0n, newSeen: 0n, gathered: 0, gatheredRf: 0n, claims: 0, restingSeen: false };
 
+const sameMilestone = (a: Milestone | null, b: Milestone) => a !== null && a.tx === b.tx && a.logIndex === b.logIndex && a.kind === b.kind;
 const when = (time?: number) => time ? new Date(time).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "";
 
 export default function Forage({ friendId, client, paused }: GameComponentProps) {
@@ -60,7 +61,8 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [trips, setTrips] = useState<Trip[]>([]);
   const [journey, setJourney] = useState<Journey>(JOURNEY_START);
   const [session, setSession] = useState<Session>(NEW_SESSION);
-  const [receipt, setReceipt] = useState<Receipt | null>(null), [reacting, setReacting] = useState(false);
+  const [receipt, setReceipt] = useState<Receipt | null>(null), [bubble, setBubble] = useState<string | null>(null);
+  const [keepsake, setKeepsake] = useState<Milestone | null>(null);
   const [laidOut, setLaidOut] = useState(false), [homeSinceClaim, setHomeSinceClaim] = useState(0n), [goldensSeen, setGoldensSeen] = useState(0);
   const [streak, setStreak] = useState(0), [holdSince, setHoldSince] = useState<number | null>(null);
   const [result, setResult] = useState<GamePlay | null>(null);
@@ -77,7 +79,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const version = ++epoch.current;
     sound.current = createFriendSoundKit({ muted: true });
     setTraits(null); setState(null); setHistory(null); setSnapshot(null); setMenu(null); setPickups([]); setTrips([]);
-    setLaidOut(false); setHomeSinceClaim(0n); setGoldensSeen(0); setStreak(0); setReceipt(null); setReacting(false);
+    setLaidOut(false); setHomeSinceClaim(0n); setGoldensSeen(0); setStreak(0); setReceipt(null); setBubble(null); setKeepsake(null);
     setJourney(JOURNEY_START); setSession(NEW_SESSION); setHoldSince(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false; historyLoading.current = false;
     const alive = () => version === epoch.current;
     client.read().then(value => alive() && setSnapshot(value)).catch(cause => alive() && setError(String(cause?.message ?? cause)));
@@ -169,15 +171,15 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   useEffect(() => {
     if (journey.stage !== "done" || receipt || !state) return;
     setReceipt({ ...session, endBlock: state.block, trips: trips.length, broughtHome: trips.reduce((sum, t) => sum + t.carried, 0n) });
-    setReacting(true); setMenu("receipt"); setMessage("");
+    setBubble(reactionFor(traits?.character ?? "")); setMenu("receipt"); setMessage("");
     sound.current?.play("reveal-legendary");
-  }, [journey.stage, receipt, session, state, trips]);
+  }, [journey.stage, receipt, session, state, trips, traits]);
 
   useEffect(() => {
-    if (!reacting) return;
-    const timer = setTimeout(() => setReacting(false), 6_000);
+    if (!bubble) return;
+    const timer = setTimeout(() => setBubble(null), 6_000);
     return () => clearTimeout(timer);
-  }, [reacting]);
+  }, [bubble]);
 
   // A golden spark's timer stops while a menu is open or the game is paused.
   const frozenSince = useRef<number | null>(null);
@@ -253,14 +255,14 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
 
   const carryingCount = pickups.filter(p => p.taken).length;
   useEffect(() => {
-    if (!carryingCount && !pour && !reacting) return;
+    if (!carryingCount && !pour && !bubble) return;
     const timer = setInterval(() => {
       const canvas = worldRef.current?.querySelector("canvas");
       const x = Number(canvas?.dataset.x), y = Number(canvas?.dataset.y);
       if (Number.isFinite(x) && Number.isFinite(y)) setFriendAt(at => at && Math.hypot(at[0] - x, at[1] - y) < 1 ? at : [x, y]);
     }, 80);
     return () => clearInterval(timer);
-  }, [carryingCount, pour, reacting]);
+  }, [carryingCount, pour, bubble]);
 
   useEffect(() => {
     if (!pour) return;
@@ -286,6 +288,14 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     setPickups(current => current.filter(p => !p.taken));
     sound.current?.play("reward");
     setMessage(`Trip ${trips.length + 1} home: ${formatRf(carried)} RF of real claimable rewards, carried as a picture of what it earned.`);
+  }
+
+  /** Homecoming: hang one of the Friend's real milestones in the Den; the Friend reacts in its family's voice. */
+  function hangKeepsake(milestone: Milestone) {
+    setKeepsake(milestone);
+    setBubble(homecomingLine(traits?.character ?? "", milestone));
+    sound.current?.play("reveal-rare");
+    navigate(null);
   }
 
   async function act(work: () => Promise<void>, cue?: FriendSoundCue, after?: () => void) {
@@ -333,6 +343,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           {p.kind === "golden" && <b>{Math.max(0, Math.ceil(((p.expiresAt ?? now) - now) / 1000))}</b>}</span>)}
         {friendAt && carrying.slice(0, TRAIL_MAX).map((p, i) => <span key={`trail-${p.id}`} className={`forage-pickup forage-trail forage-${p.kind}`}
           style={screen(friendAt, 0, CARRY_LIFT - i * CARRY_STEP)} />)}
+        {keepsake && <span className={`forage-keepsake${reducedMotion ? "" : " forage-pop"}`} style={screen(scene.stations[0], 0, -34)} />}
         {pour && Array.from({ length: pour.count }, (_, i) => <span key={`pour-${i}`} className="forage-pickup forage-pour"
           style={{ ...(pour.landed ? screen(scene.stations[0]) : screen(pour.from, 0, CARRY_LIFT - i * CARRY_STEP)), transitionDelay: `${i * 70}ms` }} />)}
       </div></div>
@@ -364,7 +375,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       {journey.stage !== "done" && state && <p className="forage-journey">{!active
         ? "First Forage waits: your Friend is resting, out of the reward pool, so nothing new can be gathered."
         : `First Forage · ${objective}`}</p>}
-      {reacting && friendAt && <div className="forage-bubble" style={screen(friendAt, bubbleShift(friendAt), -120)}>{reactionFor(traits?.character ?? "")}</div>}
+      {bubble && friendAt && <div className="forage-bubble" style={screen(friendAt, bubbleShift(friendAt), -120)}>{bubble}</div>}
       <p className="forage-hint">WASD / arrows or tap to walk · walk into glowing pickups · E at the Den, Treat stand or Proof board</p>
     </div>
 
@@ -379,12 +390,18 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <p className="forage-small">Read from this Friend's own on-chain events. It follows the NFT to every device and every owner.</p>
         {historyError ? <p role="alert">History unavailable: {historyError} <button type="button" onClick={() => setHistoryError("")}>Retry history</button></p> : !history ? <p>Reading history…</p> :
           <ol className="forage-wall">{history.truncated && <li className="forage-trip"><strong>Earlier owners</strong><span>Not shown: the wall walks back through the latest four ownership moves.</span></li>}
-            {history.milestones.map(m => <li key={`${m.tx}-${m.logIndex}-${m.kind}`}>
-            <strong>{m.title}</strong><span>{when(history.times.get(m.block))} · block {m.block.toLocaleString("en-US")}</span>
+            {history.milestones.map(m => <li key={`${m.tx}-${m.logIndex}-${m.kind}`} className={sameMilestone(keepsake, m) ? "forage-kept" : undefined}>
+            <strong>{m.title}{sameMilestone(keepsake, m) ? " · hung in the Den this session" : ""}</strong><span>{when(history.times.get(m.block))} · block {m.block.toLocaleString("en-US")}</span>
             <span>{m.detail}</span><code className="forage-hash">{EXPLORER.replace("https://", "")}/tx/{m.tx}</code></li>)}
           </ol>}
         {trips.length > 0 && <ol className="forage-wall">{trips.map(t => <li key={`trip-${t.number}`} className="forage-trip"><strong>Trip {t.number} home</strong>
           <span>{t.pickups} pickups · {formatRf(t.carried)} RF carried</span><span>This session only. Care isn't saved on-chain.</span></li>)}</ol>}
+        {trips.length > 0 && history && history.milestones.length > 0 && <>
+          <h3>Homecoming</h3>
+          <p className="forage-small">Hang one of its real milestones in the Den. The milestone is on-chain; hanging it is this session only.</p>
+          <div className="forage-keepsakes">{history.milestones.map(m => <button key={`keep-${m.tx}-${m.logIndex}-${m.kind}`} type="button" aria-pressed={sameMilestone(keepsake, m)}
+            disabled={paused} onClick={() => hangKeepsake(m)}>{m.title} · block {m.block.toLocaleString("en-US")}</button>)}</div>
+        </>}
       </> : menu === "treats" ? <>
         <p>One treat costs {formatGameRf(definition.price)} and cracks into one snack for your Friend.</p>
         <table><thead><tr><th>Treat</th><th>Chance</th><th>Value</th><th>Pull while kept</th></tr></thead><tbody>{definition.outcomes.map((item, index) =>
@@ -429,6 +446,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <dl className="forage-proof">
           <dt>Gathered</dt><dd>{receipt.gathered} pickups · {formatRf(receipt.gatheredRf)} RF</dd>
           <dt>Brought home</dt><dd>{receipt.trips} {receipt.trips === 1 ? "trip" : "trips"} · {formatRf(receipt.broughtHome)} RF</dd>
+          {keepsake && <><dt>Keepsake</dt><dd>{keepsake.title} · block {keepsake.block.toLocaleString("en-US")}, hung in the Den</dd></>}
         </dl>
         <p className="forage-small">Chain rows are read-only reads of this Friend, frozen when First Forage finished. Play rows count what you did here; pickups are a picture of its real rewards, and nothing was moved, signed or stored.</p>
       </> : menu === "settings" ? <>

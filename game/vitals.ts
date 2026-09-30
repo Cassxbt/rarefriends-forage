@@ -153,6 +153,23 @@ export function reactionFor(character: string): string {
   return REACTIONS[character] ?? "It looks proud of what it earned.";
 }
 
+const HOMECOMING: Record<string, string> = {
+  Skeleton: "Its bones rattle in approval",
+  Mask: "The Mask stands very still",
+  Family: "The whole family crowds round",
+  Cellular: "It splits in two to look closer",
+  Asymmetry: "It tilts to see it straight",
+  Hoverer: "It floats up to hang it higher",
+  Colossus: "It sets it down, very gently",
+  Sparkling: "It sparkles back at it",
+  Hollow: "Its hollow glows",
+};
+
+/** The Friend's family reacts to one of its own real milestones being hung in the Den. */
+export function homecomingLine(character: string, milestone: Readonly<{ title: string; block: bigint }>): string {
+  return `${HOMECOMING[character] ?? "It looks up, proud"}: "${milestone.title}" (block ${milestone.block.toLocaleString("en-US")}) now hangs in the Den.`;
+}
+
 /** Splits a value into parts that add back up exactly; the last part takes the remainder. */
 export function splitValue(value: bigint, parts: number): bigint[] {
   const each = value / BigInt(parts);
