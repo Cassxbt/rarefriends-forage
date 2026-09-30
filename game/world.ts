@@ -46,7 +46,8 @@ export function buildWorld(scenery: string) {
     { type: "bench", x: den[0], y: den[1] - PROP_BACK, scale: 1.2 },
     { type: "crate", x: treats[0], y: treats[1] - PROP_BACK, scale: 1.3 },
     { type: "terminal", x: proof[0], y: proof[1] - PROP_BACK, scale: 1.3 }] });
-  const open = reachable.filter(point => isWorldWalkable(world, point, CLEARANCE) && isVisible(point));
+  const labels = [den, treats, proof].map((station, i) => labelAt(station, offsets[i]));
+  const open = reachable.filter(point => isWorldWalkable(world, point, CLEARANCE) && isVisible(point) && !labels.some(label => underLabel(point, label)));
   const interactions: GameWorldInteraction[] = [
     { id: "den", label: "Den", position: den, reach: 80, labelOffset: offsets[0] },
     { id: "treats", label: "Treat stand", position: treats, reach: 80, labelOffset: offsets[1] },
@@ -65,6 +66,11 @@ const STATION_GAP = 48;
 
 /** Screen position of a station label: centered on the station, lifted by its offset. */
 export const labelAt = (station: WorldPoint, offset: number): [number, number] => { const [x, y] = viewPosition(station); return [x, y + offset]; };
+/** A pickup drawn at this spot would sit on a station label (with a little room around it). */
+export const underLabel = (point: WorldPoint, label: [number, number]) => {
+  const [x, y] = viewPosition(point);
+  return Math.abs(x - label[0]) < LABEL.width / 2 + 16 && Math.abs(y - 22 - label[1]) < LABEL.height / 2 + 16;
+};
 const labelsClear = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) >= LABEL.width || Math.abs(a[1] - b[1]) >= LABEL.height;
 
 /**

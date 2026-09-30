@@ -319,7 +319,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           {worldNote && <span className="forage-warn">{worldNote}</span>}
         </div>
         <div className="forage-card forage-pouch">
-          <span>{fresh && rate > 0n ? "Unclaimed on-chain (estimated between reads)" : "Unclaimed on-chain (last read)"}</span>
+          <span>{fresh && rate > 0n ? "Unclaimed RF · estimate" : "Unclaimed RF · last read"}</span>
           <strong>{state ? `${formatRf(pouchNow, 5)} RF` : "—"}</strong>
           <span>{state ? `+ ${formatRf(state.earnedWeth, 8)} WETH` : ""}</span>
         </div>
@@ -338,7 +338,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
       {!journeyDone && state && <p className="forage-journey">{!active
         ? "First Forage waits: your Friend is resting, out of the reward pool, so nothing new can be gathered."
         : `First Forage · ${["", `Gather ${Math.min(FIRST_FORAGE_GATHER, journey.pouchTotal)} of what it earned (${Math.min(journey.pouchGathered, FIRST_FORAGE_GATHER)}/${Math.min(FIRST_FORAGE_GATHER, journey.pouchTotal)})`,
-          carrying.length ? "Bring them home to the Den" : "Gather again, then bring it home to the Den", "Catch one fresh spark: real new earnings, spotted every 15 s"][journeyStep(journey)]}`}</p>}
+          carrying.length ? "Bring them home to the Den" : "Gather again, then bring it home to the Den", "Catch one fresh spark of new earnings"][journeyStep(journey)]}`}</p>}
       {reacting && friendAt && <div className="forage-bubble" style={screen(friendAt, 0, -120)}>{reactionFor(traits?.character ?? "")}</div>}
       <p className="forage-hint">WASD / arrows or tap to walk · walk into glowing pickups · E at the Den, Treat stand or Proof board</p>
     </div>

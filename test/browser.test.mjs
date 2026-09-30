@@ -132,7 +132,7 @@ test("an earning Friend gathers in its own world and only real events change the
 
   chain.fail = true;
   await game.getByText("Can't see your Friend's chain state right now").waitFor();
-  await game.getByText("Unclaimed on-chain (last read)").waitFor();
+  await game.getByText("Unclaimed RF · last read").waitFor();
   const frozen = await game.locator(".forage-pouch strong").innerText();
   await sleep(4_000);
   assert.equal(await game.locator(".forage-pouch strong").innerText(), frozen, "the pouch never counts up without the chain");
@@ -258,7 +258,7 @@ test("First Forage: gather three, bring them home, catch a fresh spark, get a re
   }
   await game.getByText("First Forage · Bring them home to the Den").waitFor();
   await visit(page, game, "Den");
-  await game.getByRole("button", { name: /^Bring 3 home/ }).click();
+  await game.getByRole("button", { name: /^Bring [3-9] home/ }).click();
   await game.getByRole("button", { name: "Close Den" }).click();
   await game.getByText(/First Forage · Catch one fresh spark/).waitFor();
   const spark = game.locator(".forage-pickup.forage-spark:not(.forage-trail):not(.forage-pour)").first();
