@@ -343,7 +343,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           {p.kind === "golden" && <b>{Math.max(0, Math.ceil(((p.expiresAt ?? now) - now) / 1000))}</b>}</span>)}
         {friendAt && carrying.slice(0, TRAIL_MAX).map((p, i) => <span key={`trail-${p.id}`} className={`forage-pickup forage-trail forage-${p.kind}`}
           style={screen(friendAt, 0, CARRY_LIFT - i * CARRY_STEP)} />)}
-        {keepsake && <span className={`forage-keepsake${reducedMotion ? "" : " forage-pop"}`} style={screen(scene.stations[0], 0, -34)} />}
+        {keepsake && <span className={`forage-keepsake${reducedMotion ? "" : " forage-pop"}`} style={screen(scene.stations[0])} />}
         {pour && Array.from({ length: pour.count }, (_, i) => <span key={`pour-${i}`} className="forage-pickup forage-pour"
           style={{ ...(pour.landed ? screen(scene.stations[0]) : screen(pour.from, 0, CARRY_LIFT - i * CARRY_STEP)), transitionDelay: `${i * 70}ms` }} />)}
       </div></div>
