@@ -92,7 +92,7 @@ Friend **#93858** (Generation 3, Mask), used for the screenshots above and the l
 | World | Scenery **Rooftop** → Rooftop Hangout | `Generations.tokenURI(93858)` |
 | Appeared | block 67,765,091 · 2026-09-20 07:36 UTC | [tx 0x9044d0a5…](https://robinhoodchain.blockscout.com/tx/0x9044d0a5febc01d674325d31f15a7b9cbbd087734778a55ecc8c3304438cd860) |
 | Hardwired and earning | block 67,767,619 · weight 1,450 · paid 1,000 RF | [tx 0xf52fc13b…](https://robinhoodchain.blockscout.com/tx/0xf52fc13b2c2220841c5bce21ce3089f576d4684b14bf75ce4d07ec59fe660649) |
-| Unclaimed rewards | ~124 RF at the time of the screenshots, growing every second | `ActivationManager.earned(RF, Generations, 93858)` |
+| Unclaimed rewards | ~126 RF at the time of the screenshots, growing every second | `ActivationManager.earned(RF, Generations, 93858)` |
 
 Re-run it yourself:
 
