@@ -5,7 +5,7 @@
 &nbsp;
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-37%20unit%20·%209%20e2e%20passing-10b981)
+![Tests](https://img.shields.io/badge/tests-38%20unit%20·%209%20e2e%20passing-10b981)
 ![Chain](https://img.shields.io/badge/chain-Robinhood%20mainnet%20(4663)-111)
 ![SDK](https://img.shields.io/badge/FriendSDK-0.1.4-ccff00)
 ![Track](https://img.shields.io/badge/Vibeathon-Character%20Spotlight-f59e0b)
@@ -25,6 +25,7 @@ Most Friend games ask what your Friend can *do*. Forage shows what your Friend *
 - [The problem I set out to solve](#the-problem-i-set-out-to-solve)
 - [What I built](#what-i-built)
 - [First Forage: the first minute](#first-forage-the-first-minute)
+- [Homecoming: a real milestone, hung in the Den](#homecoming-a-real-milestone-hung-in-the-den)
 - [Judge it in 90 seconds](#judge-it-in-90-seconds)
 - [Proof on mainnet](#proof-on-mainnet)
 - [How it works](#how-it-works)
@@ -73,12 +74,18 @@ A Friend with nothing waiting, or one whose rewards were just claimed, waits for
 
 <img src="assets/receipt.png" alt="First Forage receipt: blocks read, unclaimed RF at start, new earnings seen, gathered and brought home" width="720" />
 
+## Homecoming: a real milestone, hung in the Den
+
+After the first trip home, the Den offers the Friend's own milestones, read from its `Activated` and `Transfer` events. Pick one and it hangs on the Den as a keepsake, and the Friend answers in its family's voice with the real title and block: a Mask stands very still, a Colossus sets it down very gently, a Hoverer floats up to hang it higher. The milestone is on-chain; hanging it is this session only, and the Memory wall and receipt say so.
+
+<img src="assets/homecoming.png" alt="Homecoming: the Mask reacts as its real Hardwired milestone, block 67,767,619, is hung in the Den" width="720" />
+
 ## Judge it in 90 seconds
 
 1. **Open** [the preview](https://rarefriends-forage.vercel.app), connect, pick your Friend. The top-left card names **its on-chain scenery**; the world matches it.
 2. **Look at the pouch card.** That is your Friend's real unclaimed RF from the last chain read, estimated between 15-second reads. Compare it with "Claimable" on [rarefriends.com/portfolio](https://rarefriends.com/portfolio).
 3. **Follow First Forage** in the objective bar: walk into pickups (WASD, arrows or tap); they stack above your Friend's head.
-4. **Walk to the Den** and press E: bring them home, then read the **Memory wall**. Copy a tx hash into the explorer.
+4. **Walk to the Den** and press E: bring them home, read the **Memory wall** (copy a tx hash into the explorer), then hang one milestone for the **Homecoming** and watch your Friend react.
 5. **Catch a fresh spark.** It appears only after a chain read shows your Friend earned more (sometimes held back as a golden one). Catch it to finish First Forage and see its reaction and receipt.
 6. **Open the Proof board.** Each financial row names its contract call; together they are one snapshot at the block shown.
 7. **The refusal:** a Friend out of the reward pool **rests**: its pickups dim and can't be gathered, and the Den says why and what reactivation costs. Pull the network and the pouch **stops** at its last read value instead of guessing.
@@ -192,7 +199,7 @@ Expected value **0.875 RF** per treat (12.5% edge). Base pull 20, up to +60 from
 | The Friend's Scenery trait, sprite, generation, tier, weight | **Real.** Read from Robinhood mainnet. The trait picks one of six SDK worlds; Forage lays out the stations and pickups |
 | Unclaimed rewards (pouch, pickups, sparks) | **Real RF values, read-only**, estimated between reads and labelled. Pickups are a picture of them: gathering moves nothing, claiming stays on rarefriends.com. WETH is shown, not gathered |
 | Memory wall milestones | **Real.** The Friend's own `Activated` and `Transfer` events |
-| Trips home, First Forage receipt | **Session only.** The receipt separates chain reads from play counts; the sandbox has no storage, so both reset on reload |
+| Trips home, Homecoming keepsake, First Forage receipt | **Session only.** The receipt separates chain reads from play counts; the sandbox has no storage, so both reset on reload |
 | Treats, snacks, redemption, pull | **Simulated** with the SDK ledger, clearly labelled in game |
 | Live contract deployment | **Not built (never faked).** The path is the SDK's `ChanceGame`, above |
 
@@ -211,8 +218,8 @@ npm run dev             # http://127.0.0.1:4173
 
 | Command | Checks |
 |---|---|
-| `npm test` | 37 unit and world tests: the reconcile rule, sparks, claims, pull, history order, every First Forage stage change, and all six worlds |
-| `npm run test:browser` | 9 end-to-end runs of the real SDK runtime in headless Chromium with the chain mocked: claims, resting and waking transitions, a delayed read, an outage, ownership history, the golden spark, a Den trip, treat keep and redeem, First Forage with an exact receipt, and a claim mid-journey. First run `npx playwright install chromium` |
+| `npm test` | 38 unit and world tests: the reconcile rule, sparks, claims, pull, history order, every First Forage stage change, each family's Homecoming line, and all six worlds |
+| `npm run test:browser` | 9 end-to-end runs of the real SDK runtime in headless Chromium with the chain mocked: claims, resting and waking transitions, a delayed read, an outage, ownership history, the golden spark, a Den trip and a Homecoming keepsake, treat keep and redeem, First Forage with an exact receipt, and a claim mid-journey. First run `npx playwright install chromium` |
 | `npm run test:live` | #93858's real state, world and history on mainnet |
 | `npm run typecheck` · `npm run check` | TypeScript, and FriendSDK game validation |
 

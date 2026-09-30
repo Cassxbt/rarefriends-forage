@@ -25,7 +25,7 @@
 .forage-trip { border-left-color: #999 !important; }
 .forage-proof { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; }
 .forage-proof dt { color: #666; }
-.forage-proof dd { margin: 0; word-break: break-all; }
+.forage-proof dd { margin: 0; overflow-wrap: anywhere; }
 .forage-small { font-size: 11px; color: #555; }
 .forage-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .forage-reward { text-align: center; }
@@ -44,3 +44,5 @@
 .forage-kept { border-left-color: #111 !important; background: #f0ffc0 !important; }
 .forage-keepsakes { display: grid; gap: 6px; }
 .forage-keepsakes button[aria-pressed="true"] { background: #cf0; }
+/* The host's toolbar overlays the bottom of the game; keep tall menus above it (their body scrolls). */
+.forage .rf-frame-scrim { padding-bottom: 64px; }
