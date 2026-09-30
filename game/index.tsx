@@ -60,7 +60,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
   const [muted, setMuted] = useState(true), [reducedMotion, setReducedMotion] = useState(false);
   const [retry, setRetry] = useState(0);
-  const sound = useRef<FriendSoundKit | null>(null), locked = useRef(false), epoch = useRef(0), worldRef = useRef<HTMLDivElement>(null);
+  const sound = useRef<FriendSoundKit | null>(null), locked = useRef(false), epoch = useRef(0), worldRef = useRef<HTMLDivElement>(null), historyLoading = useRef(false);
   const definition = client.definition;
 
   const scene = useMemo(() => traits ? buildWorld(traits.scenery) : null, [traits]);
@@ -69,7 +69,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const version = ++epoch.current;
     sound.current = createFriendSoundKit({ muted: true });
     setTraits(null); setState(null); setHistory(null); setSnapshot(null); setMenu(null); setPickups([]); setTrips([]);
-    setLaidOut(false); setHomeSinceClaim(0n); setGoldensSeen(0); setStreak(0); setHoldSince(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false;
+    setLaidOut(false); setHomeSinceClaim(0n); setGoldensSeen(0); setStreak(0); setHoldSince(null); setChainError(""); setWorldNote(""); setHistoryError(""); setMuted(true); locked.current = false; historyLoading.current = false;
     const alive = () => version === epoch.current;
     client.read().then(value => alive() && setSnapshot(value)).catch(cause => alive() && setError(String(cause?.message ?? cause)));
     withTimeout(readFriendTraits(friendId), TRAITS_TIMEOUT_MS, "Reading this Friend's world").then(value => alive() && setTraits(value))
@@ -93,11 +93,13 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
   }, [client, friendId, retry]);
 
   useEffect(() => {
-    if (!state || history || historyError) return;
+    if (!state || history || historyError || historyLoading.current) return;
+    historyLoading.current = true;
     const version = epoch.current;
     readFriendHistory(friendId, state.owner)
       .then(h => version === epoch.current && setHistory({ milestones: toMilestones(h.transfers, h.activations), times: h.times, truncated: h.truncated }))
-      .catch(cause => version === epoch.current && setHistoryError(cause instanceof Error ? cause.message.split("\n")[0] : "History could not be read."));
+      .catch(cause => version === epoch.current && setHistoryError(cause instanceof Error ? cause.message.split("\n")[0] : "History could not be read."))
+      .finally(() => { if (version === epoch.current) historyLoading.current = false; });
   }, [state, history, historyError, friendId]);
 
   const vitals = state ? deriveVitals(state) : null;
@@ -262,7 +264,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
     const settled = await client.settle(play.id);
     if (version === epoch.current) { setResult(settled); setMenu("reward"); }
   }, "reveal-common");
-  const status = chainError ? "Can't see your Friend's chain state right now" : !state ? "Reading the chain…" : vitals?.awake ? "Awake · earning" : "Resting · not earning";
+  const status = chainError ? "Can't see your Friend's chain state right now" : !state ? "Reading the chain…" : vitals?.awake ? "Awake · in the reward pool" : "Resting · out of the reward pool";
   const feedback = <p role={error ? "alert" : "status"}>{error || message || (busy ? "Waiting for preview confirmation…" : "Treats are simulated RF. Chain readings are live and read-only.")}</p>;
   const reactivation = state ? reactivationCost(state.generation) : null;
   const nextCheck = state ? Math.max(0, Math.ceil((state.readAt + POLL_MS - now) / 1000)) : 0;
@@ -287,7 +289,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           {worldNote && <span className="forage-warn">{worldNote}</span>}
         </div>
         <div className="forage-card forage-pouch">
-          <span>{fresh ? "Unclaimed on-chain (live)" : "Unclaimed on-chain (last read)"}</span>
+          <span>{fresh && rate > 0n ? "Unclaimed on-chain (estimated between reads)" : "Unclaimed on-chain (last read)"}</span>
           <strong>{state ? `${formatRf(pouchNow, 5)} RF` : "—"}</strong>
           <span>{state ? `+ ${formatRf(state.earnedWeth, 8)} WETH` : ""}</span>
         </div>
@@ -340,7 +342,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
         <button type="button" disabled={busy || paused} onClick={() => navigate(null)}>Keep it</button>
         <button type="button" disabled={busy || paused} onClick={() => void act(() => client.redeem(result!.outcomeId!, 1n), "reward", () => setMenu("treats"))}>Redeem · {formatGameRf(outcome.reward)}</button>
       </div> : menu === "proof" ? <>
-        <p className="forage-small">Each value below is one read-only call to Robinhood Chain (4663) at the block shown. Nothing is signed or stored. The HUD pouch counts up between reads at the measured rate and freezes if a read fails.</p>
+        <p className="forage-small">The values down to Pouch are one read-only snapshot of Robinhood Chain (4663) at the block shown, refreshed every 15 s. World is read once when the session starts. Nothing is signed or stored. Between reads the HUD pouch is an estimate at the measured rate; after a failed read it shows the last read value.</p>
         {chainError && <p role="alert">Last read failed: {chainError}. <button type="button" onClick={() => setRetry(r => r + 1)}>Retry</button></p>}
         {state && <dl className="forage-proof">
           <dt>Block</dt><dd>{state.block.toLocaleString("en-US")}</dd>
@@ -350,7 +352,7 @@ export default function Forage({ friendId, client, paused }: GameComponentProps)
           <dt>Tier · weight</dt><dd>{state.tier} · {formatRf(state.weight, 2)} · ActivationManager.positions</dd>
           <dt>Reward share</dt><dd>{vitals?.shareBps.toFixed(4)} bps of {formatRf(state.totalWeight, 0)} · totalWeight</dd>
           <dt>Pouch</dt><dd>{formatRf(state.earnedRf, 6)} RF · {formatRf(state.earnedWeth, 8)} WETH · ActivationManager.earned</dd>
-          <dt>World</dt><dd>{traits?.scenery || "unknown"}{scene.matched ? "" : " (fallback world)"} · Generations.tokenURI</dd>
+          <dt>World</dt><dd>{traits?.scenery || "unknown"}{scene.matched ? "" : " (fallback world)"} · Generations.tokenURI, read at session start</dd>
         </dl>}
         <p className="forage-small">Contracts: Generations {short(CONTRACTS.generations)} · ActivationManager {short(CONTRACTS.activationManager)} · RF {short(CONTRACTS.rf)}. Verify on {EXPLORER.replace("https://", "")}.</p>
       </> : menu === "settings" ? <>
