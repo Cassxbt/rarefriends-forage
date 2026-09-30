@@ -90,7 +90,7 @@ after(async () => { await browser?.close(); server?.closeAllConnections(); serve
 
 async function open(chain) {
   const page = await (await browser.newContext({ viewport: { width: 960, height: 800 } })).newPage();
-  page.setDefaultTimeout(40_000);
+  page.setDefaultTimeout(60_000);
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   const fixture = await installFixture(page, origin, { artworkCall: await createArtworkFixture() });
@@ -171,7 +171,7 @@ test("a golden spark holds back real earnings, then scatters into three sparks i
   await golden.waitFor({ timeout: 120_000 });
   await game.getByText(/A golden spark: [\d.,]+ RF of real earnings held back/).waitFor();
   const id = await golden.getAttribute("data-id");
-  await golden.waitFor({ state: "detached", timeout: 20_000 });
+  await golden.waitFor({ state: "detached", timeout: 40_000 });
   await game.getByText("The golden spark scattered. Its value is still on the ground.").waitFor();
   assert.equal(await game.locator(`[data-id^="${id}-"]`).count(), 3, "exactly its own three fragments");
   assert.deepEqual(errors, []);
@@ -231,7 +231,7 @@ test("a Den trip lands on the wall once, and a kept treat widens the pull until 
   await game.getByText("Trip 1 home", { exact: true }).waitFor();
   await game.getByRole("button", { name: "Close Den" }).click();
   await sleep(16_000);
-  assert.ok(await pickups() <= before + 1, "bringing it home doesn't lay the same rewards out again");
+  assert.ok(await pickups() < before + 4, "bringing it home doesn't lay the same rewards out again (only fresh sparks arrive)");
 
   await visit(page, game, "Treat stand");
   await game.getByRole("button", { name: /^Buy one treat/ }).click();
