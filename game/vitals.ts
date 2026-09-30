@@ -59,7 +59,7 @@ export function reactivationCost(generation: number): string | null {
 }
 
 export function deriveVitals(state: FriendState): Vitals {
-  const shareBps = state.totalWeight > 0n ? Number((state.weight * 1_000_000n) / state.totalWeight) / 100 : 0;
+  const shareBps = state.totalWeight > 0n ? Number((state.weight * 10n ** 12n) / state.totalWeight) / 1e8 : 0;
   return { awake: state.weight > 0n, level: state.tier, shareBps, pouchRf: state.earnedRf, pouchWeth: state.earnedWeth };
 }
 

@@ -28,7 +28,7 @@ test("an earning Friend is awake with its real pouch and share", () => {
   assert.equal(vitals.awake, true);
   assert.equal(vitals.level, 0);
   assert.equal(vitals.pouchRf, friend.earnedRf);
-  assert.ok(vitals.shareBps > 0 && vitals.shareBps < 1);
+  assert.equal(vitals.shareBps.toFixed(4), "0.0143", "1,450 of 1,016,116,598 weight is 0.0143 bps, not truncated to 0.01");
 });
 
 test("a Friend with no active weight rests but keeps what it earned", () => {
