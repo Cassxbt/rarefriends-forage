@@ -31,7 +31,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function createChain({ resting = false, ownerCycle = false } = {}) {
   // Until the game makes its first read, the SDK's own fixture answers (identity and discovery).
-  const chain = { started: false, block: START, claimed: false, fail: false, slowNext: false };
+  const chain = { started: false, block: START, claimed: false, fail: false, slowNext: false, resting };
   const earned = () => chain.claimed ? 0n : 7n * RF + (chain.block - START) * 20_000_000_000_000n;
   const log = (address, topics, data, block, tx) => ({ address, topics, data, blockNumber: toHex(block), blockHash: padHex("0x10", { size: 32 }),
     logIndex: "0x0", transactionHash: padHex(tx, { size: 32 }), transactionIndex: "0x0", removed: false });
@@ -51,7 +51,7 @@ function createChain({ resting = false, ownerCycle = false } = {}) {
       if (to.toLowerCase() !== AM) return null;
       const { functionName, args } = decodeFunctionData({ abi, data });
       const result = functionName === "weth" ? WETH : functionName === "totalWeight" ? 1_016_116_597_984_375_000_000_000_000n
-        : functionName === "positions" ? [0n, resting ? 0n : 1450n * RF] : args[0].toLowerCase() === WETH ? 10n ** 13n : earned();
+        : functionName === "positions" ? [0n, chain.resting ? 0n : 1450n * RF] : args[0].toLowerCase() === WETH ? 10n ** 13n : earned();
       return { result: encodeFunctionResult({ abi, functionName, result }) };
     }
     if (request.method === "eth_getLogs") {
@@ -141,6 +141,7 @@ test("an earning Friend gathers in its own world and only real events change the
   chain.claimed = true;
   await game.getByText(/rewards were claimed/).waitFor();
   assert.equal(await pickups(), 0, "a claim clears the ground");
+  await game.getByText(/^Carrying 0 /).waitFor({ timeout: 5_000 });
   assert.deepEqual(errors, []);
   assert.deepEqual(fixture.errors, []);
 });
@@ -167,12 +168,82 @@ test("the memory wall replays history once, even when ownership cycles", { timeo
 test("a golden spark holds back real earnings, then scatters into three sparks if missed", { timeout: 300_000 }, async () => {
   const { game, errors, fixture } = await open(createChain());
   const golden = game.locator(".forage-golden");
-  await golden.waitFor({ timeout: 200_000 });
+  await golden.waitFor({ timeout: 120_000 });
   await game.getByText(/A golden spark: [\d.,]+ RF of real earnings held back/).waitFor();
-  const sparksBefore = await game.locator(".forage-spark").count();
+  const id = await golden.getAttribute("data-id");
   await golden.waitFor({ state: "detached", timeout: 20_000 });
   await game.getByText("The golden spark scattered. Its value is still on the ground.").waitFor();
-  assert.equal(await game.locator(".forage-spark").count(), sparksBefore + 3);
+  assert.equal(await game.locator(`[data-id^="${id}-"]`).count(), 3, "exactly its own three fragments");
+  assert.deepEqual(errors, []);
+  assert.deepEqual(fixture.errors, []);
+});
+
+/** Walks the Friend to a station by tapping the ground under its label, then opens it. */
+async function visit(page, game, label) {
+  const prompt = game.locator(".rf-world-prompt", { hasText: label });
+  for (const drop of [150, 90, 210]) {
+    const box = await prompt.boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + drop);
+    if (await prompt.getByText("E / tap to interact").waitFor({ timeout: 6_000 }).then(() => true, () => false)) { await prompt.click(); return; }
+  }
+  throw new Error(`Could not reach ${label}`);
+}
+
+test("a Friend that stops earning can't gather, and gathers again once active", { timeout: 180_000 }, async () => {
+  const chain = createChain();
+  const { page, game, errors, pickups } = await open(chain);
+  assert.equal(await pickups(), 12);
+  chain.resting = true;
+  await game.getByText("Resting · not earning").waitFor({ timeout: 30_000 });
+  assert.equal(await game.locator(".forage-waiting").count(), 12, "the ground waits, dimmed");
+  const box = await game.locator(".forage-pickup").first().boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
+  await sleep(4_000);
+  await game.getByText(/^Carrying 0 /).waitFor({ timeout: 2_000 });
+  chain.resting = false;
+  await game.getByText("Awake · earning").waitFor({ timeout: 30_000 });
+  assert.equal(await game.locator(".forage-waiting").count(), 0);
+  assert.deepEqual(errors, []);
+});
+
+test("a Friend that starts resting gets its waiting rewards laid out once it is active", { timeout: 120_000 }, async () => {
+  const chain = createChain({ resting: true });
+  const { game, errors, pickups } = await open(chain);
+  await sleep(1_500);
+  assert.equal(await pickups(), 0);
+  chain.resting = false;
+  await game.getByText("Awake · earning").waitFor({ timeout: 30_000 });
+  await game.getByText(/^Carrying 0 · 0 RF/).waitFor();
+  assert.equal(await pickups(), 12, "the rewards that waited while resting are laid out");
+  assert.deepEqual(errors, []);
+});
+
+test("a Den trip lands on the wall once, and a kept treat widens the pull until redeemed", { timeout: 240_000 }, async () => {
+  const { page, game, errors, fixture, pickups } = await open(createChain());
+  const box = await game.locator(".forage-pickup").first().boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
+  await game.getByText(/^Carrying 1 /).waitFor({ timeout: 20_000 });
+  const before = await pickups();
+
+  await visit(page, game, "Den");
+  await game.getByRole("button", { name: /^Bring 1 home/ }).click();
+  await game.getByText(/Brought home: 1 trip/).waitFor();
+  await game.getByText("Trip 1 home", { exact: true }).waitFor();
+  await game.getByRole("button", { name: "Close Den" }).click();
+  await sleep(16_000);
+  assert.ok(await pickups() <= before + 1, "bringing it home doesn't lay the same rewards out again");
+
+  await visit(page, game, "Treat stand");
+  await game.getByRole("button", { name: /^Buy one treat/ }).click();
+  await page.getByRole("button", { name: "Confirm preview" }).click();
+  await game.getByRole("button", { name: "Crack a treat" }).click();
+  await page.getByRole("button", { name: "Confirm preview" }).click();
+  await game.getByRole("button", { name: "Keep it" }).click();
+  await game.getByText(/pull (26|32|40|60) \(treats\)/).waitFor();
+  await visit(page, game, "Treat stand");
+  await game.getByRole("button", { name: /^Redeem one/ }).click();
+  await page.getByRole("button", { name: "Confirm preview" }).click();
+  await game.getByText(/pull 20(?! \()/).waitFor();
   assert.deepEqual(errors, []);
   assert.deepEqual(fixture.errors, []);
 });
