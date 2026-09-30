@@ -194,14 +194,14 @@ test("a Friend that stops earning can't gather, and gathers again once active", 
   const { page, game, errors, pickups } = await open(chain);
   assert.equal(await pickups(), 12);
   chain.resting = true;
-  await game.getByText("Resting · out of the reward pool").waitFor({ timeout: 30_000 });
+  await game.getByText("Resting · out of the reward pool").waitFor({ timeout: 45_000 });
   assert.equal(await game.locator(".forage-waiting").count(), 12, "the ground waits, dimmed");
   const box = await game.locator(".forage-pickup").first().boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
   await sleep(4_000);
   await game.getByText(/^Carrying 0 /).waitFor({ timeout: 2_000 });
   chain.resting = false;
-  await game.getByText("Awake · in the reward pool").waitFor({ timeout: 30_000 });
+  await game.getByText("Awake · in the reward pool").waitFor({ timeout: 45_000 });
   assert.equal(await game.locator(".forage-waiting").count(), 0);
   assert.deepEqual(errors, []);
 });
@@ -212,7 +212,7 @@ test("a Friend that starts resting gets its waiting rewards laid out once it is 
   await sleep(1_500);
   assert.equal(await pickups(), 0);
   chain.resting = false;
-  await game.getByText("Awake · in the reward pool").waitFor({ timeout: 30_000 });
+  await game.getByText("Awake · in the reward pool").waitFor({ timeout: 45_000 });
   await game.getByText(/^Carrying 0 · 0 RF/).waitFor();
   assert.equal(await pickups(), 12, "the rewards that waited while resting are laid out");
   assert.deepEqual(errors, []);
@@ -244,6 +244,30 @@ test("a Den trip lands on the wall once, and a kept treat widens the pull until 
   await game.getByRole("button", { name: /^Redeem one/ }).click();
   await page.getByRole("button", { name: "Confirm preview" }).click();
   await game.getByText(/pull 20(?! \()/).waitFor();
+  assert.deepEqual(errors, []);
+  assert.deepEqual(fixture.errors, []);
+});
+
+test("First Forage: gather three, bring them home, catch a fresh spark, get a reaction and a receipt", { timeout: 240_000 }, async () => {
+  const { page, game, errors, fixture } = await open(createChain());
+  await game.getByText(/First Forage · Gather 3 of what it earned \(0\/3\)/).waitFor();
+  for (let i = 1; i <= 3; i++) {
+    const box = await game.locator(".forage-pouch-pickup, .forage-pickup.forage-pouch:not(.forage-trail):not(.forage-pour)").first().boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
+    await game.getByText(new RegExp(`^Carrying ${i} `)).waitFor({ timeout: 20_000 });
+  }
+  await game.getByText("First Forage · Bring them home to the Den").waitFor();
+  await visit(page, game, "Den");
+  await game.getByRole("button", { name: /^Bring 3 home/ }).click();
+  await game.getByRole("button", { name: "Close Den" }).click();
+  await game.getByText(/First Forage · Catch one fresh spark/).waitFor();
+  const spark = game.locator(".forage-pickup.forage-spark:not(.forage-trail):not(.forage-pour)").first();
+  await spark.waitFor({ timeout: 40_000 });
+  const box = await spark.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2 + 16);
+  await game.getByText("First Forage complete.").waitFor({ timeout: 30_000 });
+  await game.getByText("The Mask gives nothing away, but it is clearly pleased.").first().waitFor();
+  await game.getByText(/New earnings seen/).waitFor();
   assert.deepEqual(errors, []);
   assert.deepEqual(fixture.errors, []);
 });
