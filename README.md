@@ -5,25 +5,26 @@
 &nbsp;
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-26%20unit%20·%204%20e2e%20passing-10b981)
+![Tests](https://img.shields.io/badge/tests-33%20unit%20·%208%20e2e%20passing-10b981)
 ![Chain](https://img.shields.io/badge/chain-Robinhood%20mainnet%20(4663)-111)
-![SDK](https://img.shields.io/badge/FriendSDK-0.1.3-ccff00)
+![SDK](https://img.shields.io/badge/FriendSDK-0.1.4-ccff00)
 ![Track](https://img.shields.io/badge/Vibeathon-Character%20Spotlight-f59e0b)
 
 ### Your Rare Friend gathers only what it really earned, in the world written into its own token.
 
-Most Friend games ask what your Friend can *do*. Forage shows what your Friend *is*: its world, its earnings and its history, read live from **Rare Friends on Robinhood Chain**. Nothing is invented.
+Most Friend games ask what your Friend can *do*. Forage shows what your Friend *is*: its world, its earnings and its history, read live from **Rare Friends on Robinhood Chain**. No reward is invented.
 
 **[ Play it ↗ ](https://cassxbt.github.io/rarefriends-forage/)** · **[ Judge it in 90 seconds ↓ ](#judge-it-in-90-seconds)** · **[ Proof on mainnet ↓ ](#proof-on-mainnet)** · **[ What's real ↓ ](#whats-real-and-whats-simulated)**
 
 </div>
 
-> **To play:** a browser wallet on Robinhood mainnet holding a hardwired Generations Friend (generation ≥ 1). No RF, no signature, no transaction.
+> **To play:** a browser wallet on Robinhood mainnet holding a hardwired Generations Friend (generation ≥ 1). No RF funding, signature or transaction is needed: treats use the SDK's simulated ledger.
 
 ## Contents
 
 - [The problem I set out to solve](#the-problem-i-set-out-to-solve)
 - [What I built](#what-i-built)
+- [First Forage: the first minute](#first-forage-the-first-minute)
 - [Judge it in 90 seconds](#judge-it-in-90-seconds)
 - [Proof on mainnet](#proof-on-mainnet)
 - [How it works](#how-it-works)
@@ -40,7 +41,7 @@ A Rare Friend is not a picture. It has its own wallet, it earns RF and WETH ever
 
 Yet a game in the FriendSDK sandbox forgets everything on reload, and most Friend games treat the NFT as a skin: a sprite dropped into someone else's world, playing for numbers the game made up.
 
-I wanted the opposite: **a game where the Friend's real on-chain life *is* the level.** Its world, its food and its memories come from the chain, and the game refuses to show anything the chain doesn't back.
+I wanted the opposite: **a game where the Friend's real on-chain life *is* the level.** Its world, its rewards and its memories come from the chain. The layout, the treats and the trips are game design, and the game labels them as such; what it never does is show a reward the chain doesn't back.
 
 ## What I built
 
@@ -48,8 +49,8 @@ I wanted the opposite: **a game where the Friend's real on-chain life *is* the l
 
 1. **Read** the selected Friend: its Scenery trait, reward position and unclaimed rewards, plus its history from event logs.
 2. **Place** it in *its own* world. The token's Scenery trait picks one of the six Rare Friends worlds.
-3. **Gather** its real unclaimed rewards, laid out as glowing pickups. Kept treats give it a magnet pull.
-4. **Grow** the ground only from real earnings: each chain read that shows new rewards adds a spark worth exactly that increase. Every few sparks, the earnings are held back and arrive as one **golden spark** on a timer; missed, it scatters into sparks worth exactly the same.
+3. **Gather** its real unclaimed RF, laid out as glowing pickups (WETH is shown, not gathered). Kept treats give it a magnet pull.
+4. **Grow** the ground only from real earnings: each chain read that shows new rewards adds a spark worth exactly that increase. Now and then the earnings are held back and arrive as one **golden spark** on a 12-second timer (the first one about 45 seconds in); missed, it scatters into three sparks worth exactly the same.
 5. **Bring home** to the Den, where the trip lands on a **Memory wall** beside the Friend's real milestones and their transaction hashes.
 6. **Prove** every number on the Proof board: contract, function and block.
 
@@ -58,15 +59,25 @@ I wanted the opposite: **a game where the Friend's real on-chain life *is* the l
 | <img src="assets/den.png" alt="Memory wall with real milestones and transaction hashes" /> | <img src="assets/proof.png" alt="Proof board: every live number with its contract call and block" /> |
 | **Memory wall.** Real lifecycle events with explorer links, then this session's trips, labelled as session-only. | **Proof board.** Each live value, the contract call behind it and the block it was read at. |
 
+## First Forage: the first minute
+
+Every session opens with a short journey, shown in the objective bar:
+
+1. **Gather 3 of what it earned** from the waiting pouch.
+2. **Bring them home to the Den.**
+3. **Catch one fresh spark**: real new earnings, seen between two chain reads.
+
+Finish it and your Friend reacts in its own family's voice (a Mask gives nothing away, a Colossus shakes the ground), and a **receipt** opens: the blocks read, unclaimed RF at the start, new earnings seen, what you gathered and brought home, and any claims or resting seen. A Friend with an empty pouch starts at step 3; a resting Friend is told why the journey can't run. Nothing is faked to complete it.
+
 ## Judge it in 90 seconds
 
 1. **Open** [the preview](https://cassxbt.github.io/rarefriends-forage/), connect, pick your Friend. The top-left card names **its on-chain scenery**; the world matches it.
-2. **Look at the pouch card.** That is your Friend's real unclaimed RF, ticking between 15-second chain reads. Compare it with "Claimable" on [rarefriends.com/portfolio](https://rarefriends.com/portfolio).
-3. **Walk into pickups** (WASD, arrows or tap). They stack above your Friend's head.
+2. **Look at the pouch card.** That is your Friend's real unclaimed RF from the last chain read, estimated between 15-second reads. Compare it with "Claimable" on [rarefriends.com/portfolio](https://rarefriends.com/portfolio).
+3. **Follow First Forage** in the objective bar: walk into pickups (WASD, arrows or tap); they stack above your Friend's head.
 4. **Walk to the Den** and press E: bring them home, then read the **Memory wall**. Copy a tx hash into the explorer.
-5. **Wait about 15 s.** A white spark appears, but only if the chain says your Friend earned more.
-6. **Open the Proof board.** Every value names its contract call and block.
-7. **The refusal:** a Friend that isn't earning **rests** and can't gather, and the Den tells you why and what reactivation costs. Pull the network and the pouch **freezes** at its last read instead of guessing.
+5. **Catch a white spark.** It appears only if the next chain read shows your Friend earned more. Catch it to finish First Forage and see its reaction and receipt.
+6. **Open the Proof board.** Each value names its contract call and the block of the snapshot.
+7. **The refusal:** a Friend out of the reward pool **rests**: its pickups dim and can't be gathered, and the Den says why and what reactivation costs. Pull the network and the pouch **stops** at its last read value instead of guessing.
 
 ## Proof on mainnet
 
@@ -110,7 +121,7 @@ flowchart LR
   T -. simulated ledger .-> W
 ```
 
-The SDK runtime owns the wallet and verifies ownership. The game only receives the Friend's ID, then reads the chain directly. The sandbox allows exactly one host: the public Robinhood RPC. Nothing in the game can sign.
+The SDK runtime owns the wallet and verifies ownership. The game only receives the Friend's ID, then reads the chain directly: the financial state as one snapshot pinned to a block every 15 s, the world metadata once per session, and history from event logs. The sandbox lets the game reach one outside host, the public Robinhood RPC. Nothing in the game can sign.
 
 | File | Job |
 |---|---|
@@ -139,18 +150,19 @@ Forage shows the refusal, not only the happy path. Each case is covered by an au
 
 | Situation | What Forage does | Tested in |
 |---|---|---|
-| Friend isn't earning (activation cleared) | Rests: no pickups; the Den explains and shows the reactivation cost | `test/browser.test.mjs` |
-| RPC unreachable | Says "Can't see your Friend's chain state"; the pouch freezes at the last read | `test/browser.test.mjs` |
-| A slow read arrives after a newer one | Ignored; it can't wipe the ground or fake a claim | `test/browser.test.mjs` |
-| Rewards claimed on rarefriends.com | Detects the drop, clears the ground and says so | `test/browser.test.mjs` |
+| Friend leaves the reward pool mid-session | Pickups dim and can't be gathered; the Den explains and shows the reactivation cost | `test/browser.test.mjs` (awake → resting) |
+| Friend starts resting, then rejoins | Its waiting rewards are laid out once it's active again | `test/browser.test.mjs` (resting → awake) |
+| Rewards claimed on rarefriends.com, even while carrying | The ground **and** what it carries are cleared, and the game says so | `test/browser.test.mjs`, `game/vitals.test.ts` |
+| RPC unreachable | "Can't see your Friend's chain state"; the pouch stops at its last read value | `test/browser.test.mjs` |
+| A delayed read | Can't wipe the ground or fake a claim; a read older than the one on screen is dropped by block number | `test/browser.test.mjs` (delayed read), `game/index.tsx` |
 | Golden spark missed | Scatters into three sparks worth exactly the same | `test/browser.test.mjs`, `game/vitals.test.ts` |
-| Friend changed owners, even A → B → A | Memory wall walks history backwards without repeats | `test/browser.test.mjs` |
+| Ownership moves, even A → B → A, or twice in one block | The wall walks back in chain order (block, then log position), up to four moves, and says when it stops early | `test/browser.test.mjs`, `game/vitals.test.ts` |
 | World metadata can't be read | Loads the default world and says so on the HUD | `game/world.test.ts` (fallback world builds) |
 | Bringing pickups home away from the Den | Refused: "Walk your Friend to the Den" | `test/browser.test.mjs` |
 
 ## The Treat stand: RF economy
 
-**Simulated, as the Vibeathon requires.** A treat costs **1 RF** and cracks into a snack. Keep the snack and your Friend's **pull** grows, so pickups glide to it from farther away. Redeem it for fixed RF and the pull goes with it. Every reveal is a choice: *the RF, or the magnet?*
+**Simulated, as the Vibeathon recommends for an MVP.** A treat costs **1 RF** and cracks into a snack. Keep the snack and your Friend's **pull** grows, so pickups glide to it from farther away. Redeem it for fixed RF and the pull goes with it. Every reveal is a choice: *the RF, or the magnet?*
 
 | Snack | Chance | Redeems for | Pull while kept |
 |---|---:|---:|---:|
@@ -163,9 +175,9 @@ Expected value **0.875 RF** per treat (12.5% edge). Base pull 20, up to +60 from
 
 ## Engineering decisions
 
-- **Never invent a number.** The pouch projects between reads only while the last read is fresh; after a failed read it freezes and says so. A read older than the one on screen is dropped.
+- **Never show more than the chain backs.** One rule reconciles the game with each read: everything it represents (ground, carried and brought home since the last claim) may never exceed the Friend's real unclaimed RF. Less means a claim; more means new ground. Between reads the pouch is an estimate at the measured rate, labelled as one; after a failed read it shows the last read value.
 - **A spark is exactly one real increase.** No fixed spark size, so a slow earner still sees sparks and none are made up. A missed golden spark splits into parts that add back to the same value.
-- **History comes from events, not old state.** The public RPC keeps only recent state and rejects log queries over 10M blocks or filtered by token alone. So `Activated` is read by token, and `Transfer` by walking owners backwards, strictly earlier each step.
+- **History comes from events, not old state.** The public RPC keeps only recent state and rejects log queries over 10M blocks or filtered by token alone. So `Activated` is read by token, and `Transfer` by walking owners backwards in chain order (block, then log position), so two moves in one block both survive.
 - **The world is laid out, not guessed.** One flood fill finds every reachable spot (12–107 ms, down from up to 4.6 s with per-point routing). Stations are placed so their labels never overlap, stay below the HUD and never cover the Friend where it appears, and their props draw behind it wherever the world has room (all but the tiny Orbital world). Tested in all six worlds.
 
 ## What's real and what's simulated
@@ -174,13 +186,13 @@ Expected value **0.875 RF** per treat (12.5% edge). Base pull 20, up to +60 from
 |---|---|
 | Wallet connection and ownership gate | **Real.** FriendSDK runtime, fresh on-chain eligibility check |
 | The Friend's world, sprite, generation, tier, weight | **Real.** Read from Robinhood mainnet |
-| Unclaimed rewards (pouch, pickups, sparks) | **Real values, read-only.** Pickups are a picture of them: gathering moves nothing, claiming stays on rarefriends.com |
+| Unclaimed rewards (pouch, pickups, sparks) | **Real RF values, read-only**, estimated between reads and labelled. Pickups are a picture of them: gathering moves nothing, claiming stays on rarefriends.com. WETH is shown, not gathered |
 | Memory wall milestones | **Real.** The Friend's own `Activated` and `Transfer` events |
-| Trips home | **Session only.** The sandbox has no storage; the wall labels them |
+| Trips home, First Forage receipt | **Session only.** The sandbox has no storage; both are labelled |
 | Treats, snacks, redemption, pull | **Simulated** with the SDK ledger, clearly labelled in game |
 | Live contract deployment | **Not built (never faked).** The path is the SDK's `ChanceGame`, above |
 
-Known limits: trips and treats reset on reload; the SDK's stock `friendsdk test` harness mocks only SDK calls, so [`test/browser.test.mjs`](test/browser.test.mjs) adds Forage's reads on top of the same fixture; a Friend with more than four owners shows its latest four moves; tested on desktop Chrome.
+Known limits: trips, treats and the receipt reset on reload; the SDK's stock `friendsdk test` harness mocks only SDK calls, so [`test/browser.test.mjs`](test/browser.test.mjs) adds Forage's reads on top of the same fixture; the wall shows the latest four ownership moves; `npm run test:live` checks #93858's exact history, so it needs updating if that Friend changes hands; tested on desktop Chrome.
 
 ## Run it, test it
 
@@ -195,12 +207,12 @@ npm run dev             # http://127.0.0.1:4173
 
 | Command | Checks |
 |---|---|
-| `npm test` | 26 unit and world tests: vitals, sparks, claims, pull, and all six worlds |
-| `npm run test:browser` | 4 end-to-end runs of the real SDK runtime in headless Chromium, with the chain mocked |
+| `npm test` | 33 unit and world tests: the reconcile rule, sparks, claims, pull, history order, First Forage, and all six worlds |
+| `npm run test:browser` | 8 end-to-end runs of the real SDK runtime in headless Chromium with the chain mocked: claims, resting and waking transitions, a delayed read, an outage, ownership history, the golden spark, a Den trip, treat keep and redeem, and First Forage. First run `npx playwright install chromium` |
 | `npm run test:live` | #93858's real state, world and history on mainnet |
 | `npm run typecheck` · `npm run check` | TypeScript, and FriendSDK game validation |
 
-Also played by hand with a real wallet and Friend #93858: gate, world, gathering, sparks, a Den trip, the Memory wall, the Proof board, and a Honeycomb raising the pull from 20 to 40.
+Also played by hand with a real wallet and Friend #93858 (before First Forage was added): gate, world, gathering, sparks, a Den trip, the Memory wall, the Proof board, and a Honeycomb raising the pull from 20 to 40.
 
 ---
 
@@ -208,6 +220,6 @@ Also played by hand with a real wallet and Friend #93858: gate, world, gathering
 
 Built for the **[Rare Friends Vibeathon](https://rarefriends.com/vibeathon)** · **Character Spotlight** · by [@Cassxbt](https://github.com/Cassxbt)
 
-FriendSDK 0.1.3 (Apache-2.0) supplies the runtime, worlds, sprites and sounds ([NOTICE](NOTICE.md)). Forage's code is [MIT](LICENSE).
+FriendSDK 0.1.4 (Apache-2.0) supplies the runtime, worlds, sprites and sounds ([NOTICE](NOTICE.md)). Forage's code is [MIT](LICENSE).
 
 </div>
