@@ -14,10 +14,12 @@
 
 Most Friend games ask what your Friend can *do*. Forage shows what your Friend *is*: its world, its earnings and its history, read live from **Rare Friends on Robinhood Chain**. No reward is invented.
 
-**[ Play it ↗ ](https://rarefriends-forage.vercel.app)** · **[ Judge it in 90 seconds ↓ ](#judge-it-in-90-seconds)** · **[ Proof on mainnet ↓ ](#proof-on-mainnet)** · **[ What's real ↓ ](#whats-real-and-whats-simulated)**
+**[ Play it ↗ ](https://rarefriends-forage.vercel.app)** · **[ Watch the 1-minute demo ↗ ](https://youtu.be/9YjTwOAH9zA)** · **[ Judge it in 90 seconds ↓ ](#judge-it-in-90-seconds)** · **[ Proof on mainnet ↓ ](#proof-on-mainnet)** · **[ What's real ↓ ](#whats-real-and-whats-simulated)**
 
 </div>
 
+> **Demo:** [1-minute video](https://youtu.be/9YjTwOAH9zA) of Friend #93858 on the hosted preview, with live mainnet reads (a read-only wallet; nothing signed).
+>
 > **To play:** a browser wallet on Robinhood mainnet holding a hardwired Generations Friend (generation ≥ 1). No RF funding, signature or transaction is needed: treats use the SDK's simulated ledger.
 
 ## Contents
